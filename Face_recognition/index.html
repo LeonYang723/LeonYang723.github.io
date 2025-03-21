@@ -9,7 +9,7 @@
 <body>
     <h2>ESP32 人臉 68 特徵點偵測</h2>
     <button id="connectBtn">連接 ESP32 藍牙</button>
-    <video id="video" autoplay playsinline></video>
+    <video id="video" width="640" height="480" autoplay playsinline></video>
     <canvas id="overlay"></canvas>
 
     <script>
@@ -21,7 +21,7 @@
         const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
         const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 
-        // ✅ 修正 ESP32 藍牙連接，確認 BLE 是否成功
+        // ✅ 修正 ESP32 BLE 連接，確保 BLE 連接後立即啟動攝影機
         async function connectBLE() {
             try {
                 console.log("🔵 嘗試連接 ESP32 藍牙...");
@@ -36,7 +36,7 @@
                 console.log("✅ ESP32 BLE 連接成功！");
 
                 // 🔹 **確保 BLE 連接後立即啟動攝影機**
-                await startVideo();
+                startVideo();
             } catch (error) {
                 console.error("❌ 連接 ESP32 BLE 失敗: ", error);
             }
@@ -46,7 +46,7 @@
         async function startVideo() {
             try {
                 console.log("📷 嘗試啟動攝影機...");
-                const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 video.srcObject = stream;
                 console.log("✅ 攝影機已啟動！");
             } catch (error) {
@@ -55,15 +55,7 @@
             }
         }
 
-        // ✅ `loadModels()`，確保模型載入完成後才啟動攝影機
-        async function loadModels() {
-            console.log("🟢 開始載入 Face-api.js 模型...");
-            await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
-            await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
-            console.log("✅ Face-api.js 模型載入完成");
-        }
-
-        // 🔹 確保 `detectLandmarks()` 只在攝影機啟動後運行
+        // ✅ 確保 `detectLandmarks()` 只在攝影機啟動後運行
         async function detectLandmarks() {
             if (!video.srcObject) {
                 console.warn("⚠️ 攝影機尚未啟動，跳過偵測！");
@@ -99,10 +91,18 @@
 
         // ✅ 修正程式邏輯
         document.getElementById('connectBtn').addEventListener('click', async () => {
+            console.log("🔵 按下連接按鈕，開始連接 ESP32...");
             await connectBLE();
         });
 
         // ✅ 先載入模型，然後等使用者點擊按鈕再啟動攝影機
+        async function loadModels() {
+            console.log("🟢 開始載入 Face-api.js 模型...");
+            await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
+            await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
+            console.log("✅ Face-api.js 模型載入完成");
+        }
+
         loadModels();
 
         // ✅ 每 0.5 秒偵測一次（攝影機必須啟動後才會運行）
@@ -110,4 +110,5 @@
     </script>
 </body>
 </html>
+
 
