@@ -107,10 +107,7 @@
       faceapi.matchDimensions(canvas, displaySize);
 
       const result = await faceapi
-        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({
-          inputSize: 512,   // ✅ 降低 scale 讓人臉比例更準確
-          scoreThreshold: 0.5
-        }))
+        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
         .withFaceLandmarks();
 
       if (!result) {
@@ -118,15 +115,11 @@
         return;
       }
 
-      // **修正特徵點過寬問題**
-      const resized = faceapi.resizeResults(result, {
-        width: video.videoWidth * 0.9,  // ✅ 調整寬度比例
-        height: video.videoHeight * 0.9
-      });
-
+      const resized = faceapi.resizeResults(result, displaySize);
       const landmarks = resized.landmarks.positions;
+
       drawLandmarks(landmarks);
-      sendToESP32(landmarks);
+      sendToESP32(landmarks); // 分批傳送
     }
 
     // ========= 繪製點 =========
