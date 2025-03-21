@@ -144,7 +144,7 @@
     async function sendToESP32(landmarks) {
   if (!UARTService) return;
   const txChar = await UARTService.getCharacteristic(RX_UUID);
-  const chunkSize = 30;  // ✅ **增加一次發送 30 個點，減少斷片**
+  const chunkSize = 34;  // ✅ **增加一次發送 34 個點，減少斷片**
   let totalChunks = Math.ceil(landmarks.length / chunkSize); // 計算總共幾個 chunk
 
   for (let i = 0; i < landmarks.length; i += chunkSize) {
