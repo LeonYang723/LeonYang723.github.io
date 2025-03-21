@@ -47,8 +47,8 @@ async function startVideo() {
 
 // ========= 載入模型 =========
 async function loadModels() {
-  await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
-  await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
+  await faceapi.nets.tinyFaceDetector.loadFromUri('./models');
+  await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
   console.log("✅ 模型載入完成");
 }
 
