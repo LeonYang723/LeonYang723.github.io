@@ -21,33 +21,55 @@
         const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
         const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 
-        // 連接 ESP32 藍牙
+        // ✅ 修正 ESP32 藍牙連接，確認 BLE 是否成功
         async function connectBLE() {
-            BLEDevice = await navigator.bluetooth.requestDevice({
-                acceptAllDevices: true,
-                optionalServices: [UART_SERVICE]
-            });
+            try {
+                console.log("🔵 嘗試連接 ESP32 藍牙...");
+                BLEDevice = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true,
+                    optionalServices: [UART_SERVICE]
+                });
 
-            const server = await BLEDevice.gatt.connect();
-            UARTService = await server.getPrimaryService(UART_SERVICE);
-            console.log("ESP32 已連接");
+                console.log("🔗 連接 GATT 伺服器...");
+                const server = await BLEDevice.gatt.connect();
+                UARTService = await server.getPrimaryService(UART_SERVICE);
+                console.log("✅ ESP32 BLE 連接成功！");
+
+                // 🔹 **確保 BLE 連接後立即啟動攝影機**
+                await startVideo();
+            } catch (error) {
+                console.error("❌ 連接 ESP32 BLE 失敗: ", error);
+            }
         }
 
-        // 載入 Face-api.js 模型
+        // ✅ 修正 `startVideo()`，確保攝影機權限允許
+        async function startVideo() {
+            try {
+                console.log("📷 嘗試啟動攝影機...");
+                const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
+                video.srcObject = stream;
+                console.log("✅ 攝影機已啟動！");
+            } catch (error) {
+                console.error("❌ 無法啟動攝影機: ", error);
+                alert("請允許存取攝影機！");
+            }
+        }
+
+        // ✅ `loadModels()`，確保模型載入完成後才啟動攝影機
         async function loadModels() {
+            console.log("🟢 開始載入 Face-api.js 模型...");
             await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
             await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
-            console.log("模型載入完成");
+            console.log("✅ Face-api.js 模型載入完成");
         }
 
-        // 啟動攝影機
-        async function startVideo() {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
-            video.srcObject = stream;
-        }
-
-        // 偵測人臉
+        // 🔹 確保 `detectLandmarks()` 只在攝影機啟動後運行
         async function detectLandmarks() {
+            if (!video.srcObject) {
+                console.warn("⚠️ 攝影機尚未啟動，跳過偵測！");
+                return;
+            }
+
             const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
             if (!detections) return;
 
@@ -56,7 +78,7 @@
             sendToESP32(landmarks);
         }
 
-        // 繪製 68 個特徵點
+        // ✅ 繪製 68 個特徵點
         function drawLandmarks(landmarks) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = "red";
@@ -67,7 +89,7 @@
             });
         }
 
-        // 傳送 68 個特徵點數據到 ESP32
+        // ✅ 傳送 68 個特徵點數據到 ESP32
         async function sendToESP32(landmarks) {
             if (!UARTService) return;
             let data = landmarks.map(pt => `${pt.x.toFixed(2)},${pt.y.toFixed(2)}`).join("|");
@@ -75,12 +97,17 @@
             await txChar.writeValue(new TextEncoder().encode(data));
         }
 
-        // 監聽按鈕點擊事件
-        document.getElementById('connectBtn').addEventListener('click', connectBLE);
+        // ✅ 修正程式邏輯
+        document.getElementById('connectBtn').addEventListener('click', async () => {
+            await connectBLE();
+        });
 
-        // 啟動模型與攝影機
-        loadModels().then(startVideo);
-        setInterval(detectLandmarks, 500); // 每 0.5 秒偵測一次
+        // ✅ 先載入模型，然後等使用者點擊按鈕再啟動攝影機
+        loadModels();
+
+        // ✅ 每 0.5 秒偵測一次（攝影機必須啟動後才會運行）
+        setInterval(detectLandmarks, 500);
     </script>
 </body>
 </html>
+
