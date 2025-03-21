@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ESP32 Face Detection</title>
   <script src="./face-api.min.js"></script>
   <style>
@@ -142,12 +142,12 @@
       for (let i = 0; i < landmarks.length; i += chunkSize) {
         const chunk = landmarks
           .slice(i, i + chunkSize)
-          .map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`)
+          .map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`) // 確保格式完整 (x,y)
           .join('|');
 
+        console.log("📤 傳送數據:", chunk); // ✅ Debug: 確認數據完整性
         await txChar.writeValue(new TextEncoder().encode(chunk));
-        console.log(`📤 傳送分段 ${i}~${i + chunkSize - 1}`);
-        await new Promise(res => setTimeout(res, 100)); // 等待避免 BLE 堵塞
+        await new Promise(res => setTimeout(res, 150)); // 避免 BLE 傳輸過快
       }
 
       console.log("✅ 所有特徵點已分批傳送完畢");
