@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Face Detection</title>
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+</head>
+<body>
+    <h2>ESP32 人臉 68 特徵點偵測</h2>
+    <button id="connectBtn">連接 ESP32 藍牙</button>
+    <video id="video" autoplay playsinline></video>
+    <canvas id="overlay"></canvas>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('overlay');
+        let ctx = canvas.getContext('2d');
+        let BLEDevice, UARTService;
+        
+        const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+        const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
+
+        // 連接 ESP32 藍牙
+        async function connectBLE() {
+            BLEDevice = await navigator.bluetooth.requestDevice({
+                acceptAllDevices: true,
+                optionalServices: [UART_SERVICE]
+            });
+
+            const server = await BLEDevice.gatt.connect();
+            UARTService = await server.getPrimaryService(UART_SERVICE);
+            console.log("ESP32 已連接");
+        }
+
+        // 載入 Face-api.js 模型
+        async function loadModels() {
+            await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
+            await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
+            console.log("模型載入完成");
+        }
+
+        // 啟動攝影機
+        async function startVideo() {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
+            video.srcObject = stream;
+        }
+
+        // 偵測人臉
+        async function detectLandmarks() {
+            const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
+            if (!detections) return;
+
+            const landmarks = detections.landmarks.positions;
+            drawLandmarks(landmarks);
+            sendToESP32(landmarks);
+        }
+
+        // 繪製 68 個特徵點
+        function drawLandmarks(landmarks) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "red";
+            landmarks.forEach(pt => {
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 2, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+        }
+
+        // 傳送 68 個特徵點數據到 ESP32
+        async function sendToESP32(landmarks) {
+            if (!UARTService) return;
+            let data = landmarks.map(pt => `${pt.x.toFixed(2)},${pt.y.toFixed(2)}`).join("|");
+            let txChar = await UARTService.getCharacteristic(RX_UUID);
+            await txChar.writeValue(new TextEncoder().encode(data));
+        }
+
+        // 監聽按鈕點擊事件
+        document.getElementById('connectBtn').addEventListener('click', connectBLE);
+
+        // 啟動模型與攝影機
+        loadModels().then(startVideo);
+        setInterval(detectLandmarks, 500); // 每 0.5 秒偵測一次
+    </script>
+</body>
+</html>
