@@ -144,8 +144,7 @@
     async function sendToESP32(landmarks) {
   if (!UARTService) return;
   const txChar = await UARTService.getCharacteristic(RX_UUID);
-  const chunkSize = 20;  // ✅ **確保 68 個點分成 2 個 Chunk 發送**
-
+  const chunkSize = 17;  // ✅ **一次發送 17 個點，4 次剛好 68 個**
   let totalChunks = Math.ceil(landmarks.length / chunkSize); // **計算總共幾個 chunk**
   console.log(`🚀 開始傳送 ${totalChunks} 個分段`);
 
