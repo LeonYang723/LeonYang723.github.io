@@ -89,21 +89,26 @@
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
       video.srcObject = stream;
       video.onloadedmetadata = () => {
-        video.play();
-        const width = video.videoWidth || 640;
-        const height = video.videoHeight || 480;
+  const width = video.videoWidth;
+  const height = video.videoHeight;
 
-        canvas.width = width;
-        canvas.height = height;
-        video.width = width;
-        video.height = height;
+  if (width === 0 || height === 0) {
+    console.warn("⚠️ 無法取得 video 尺寸，設定預設值 640x480");
+  }
 
-        canvas.style.width = width + 'px';
-        canvas.style.height = height + 'px';
-        video.style.width = width + 'px';
-        video.style.height = height + 'px';
-      };
-    }
+  const w = width || 640;
+  const h = height || 480;
+
+  video.setAttribute("width", w);
+  video.setAttribute("height", h);
+  canvas.width = w;
+  canvas.height = h;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+
+  console.log("✅ 攝影機尺寸設定完成:", w, "x", h);
+  video.play();
+}
 
     // ✅ 載入模型
     async function loadModels() {
