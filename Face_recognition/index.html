@@ -19,6 +19,12 @@
     h2 {
       margin-bottom: 20px;
     }
+    .btn-container {
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: row;
+      gap: 10px;
+    }
     button {
       padding: 12px 24px;
       font-size: 18px;
@@ -27,7 +33,6 @@
       background-color: #007bff;
       color: white;
       cursor: pointer;
-      margin: 10px;
     }
     #videoContainer {
       position: relative;
@@ -49,8 +54,10 @@
 </head>
 <body>
   <h2>ESP32 人臉特徵點偵測</h2>
-  <button id="connectBtn">🔗 連接 BLE</button>
-  <button id="detectBtn" disabled>🔍 開始偵測</button>
+  <div class="btn-container">
+    <button id="connectBtn">🔗 連接 BLE</button>
+    <button id="detectBtn" disabled>🔍 開始偵測</button>
+  </div>
 
   <div id="videoContainer">
     <video id="video" autoplay muted playsinline></video>
