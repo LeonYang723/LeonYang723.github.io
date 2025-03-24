@@ -92,25 +92,28 @@
     async function loadModels() {
       await faceapi.nets.tinyFaceDetector.loadFromUri('./models');
       await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
-      console.log("✅ Models loaded");
+      console.log("✅ 模型載入完成");
     }
 
     async function detectLandmarks() {
-      const detection = await faceapi
-        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-        .withFaceLandmarks();
+  console.log("🔍 detectLandmarks 被呼叫");
 
-      if (!detection) {
-        console.log("❌ No face detected");
-        return;
-      }
+  const detection = await faceapi
+    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+    .withFaceLandmarks();
 
-      const landmarks = detection.landmarks.positions;
-      console.log("🎯 Landmarks count:", landmarks.length);
+  if (!detection) {
+    console.warn("⚠️ 未偵測到人臉！");
+    return;
+  }
 
-      drawLandmarks(landmarks);
-      sendToESP32(landmarks);
-    }
+  const landmarks = detection.landmarks.positions;
+  console.log("🎯 Landmarks 數量：", landmarks.length);
+
+  drawLandmarks(landmarks);
+  sendToESP32(landmarks);
+}
+
 
     function drawLandmarks(landmarks) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
