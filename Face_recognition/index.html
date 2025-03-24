@@ -165,7 +165,7 @@
         const header = `CHUNK:${Math.floor(i / pointsPerChunk) + 1}/${Math.ceil(landmarks.length / pointsPerChunk)}`;
         const message = `${header}|${data}`;
         await txChar.writeValue(new TextEncoder().encode(message));
-        await new Promise(res => setTimeout(res, 50));
+        await new Promise(res => setTimeout(res, 100));
       }
       console.log("📡 已分批傳送 68 個特徵點資料至 ESP32");
     }
