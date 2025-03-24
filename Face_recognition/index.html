@@ -38,21 +38,23 @@
     }
 #videoContainer {
   position: relative;
+  width: 100%;
+  max-width: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
-  width: 100%;
-  max-width: 100%;
   overflow: hidden;
 }
 
 video, canvas {
   display: block;
-  width: 100%;
+  width: 100vw;           /* 使用整個螢幕寬度 */
   height: auto;
-  max-width: 640px;
+  max-width: 640px;       /* 避免在大螢幕時過大 */
   border-radius: 12px;
+  object-fit: contain;    /* 防止壓縮變形 */
 }
+
 
     video {
       background: black;
@@ -111,10 +113,11 @@ video, canvas {
           const h = video.videoHeight || 480;
 
           video.style.display = "block";
-          video.width = w;
-          video.height = h;
-          canvas.width = w;
-          canvas.height = h;
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          canvas.style.width = "100vw";
+          canvas.style.height = "auto";
+
           video.style.width = w + "px";
           video.style.height = h + "px";
           canvas.style.width = w + "px";
