@@ -154,24 +154,30 @@
     }
 
     async function sendToESP32(landmarks) {
-  if (!UARTService) return;
-  const txChar = await UARTService.getCharacteristic(RX_UUID);
+      if (!UARTService) return;
+      const txChar = await UARTService.getCharacteristic(RX_UUID);
 
-  const chunks = [];
-  const pointsPerChunk = 4;
-  for (let i = 0; i < landmarks.length; i += pointsPerChunk) {
-    const chunk = landmarks.slice(i, i + pointsPerChunk);
-    const data = chunk.map(pt => `${pt.x.toFixed(2)},${pt.y.toFixed(2)}`).join("|");
-    const header = `CHUNK:${Math.floor(i / pointsPerChunk) + 1}/${Math.ceil(landmarks.length / pointsPerChunk)}`;
-    const message = `${header}|${data}`;
+      const pointsPerChunk = 4;  // 一個 chunk 傳 4 筆點資料
+      const totalChunks = Math.ceil(landmarks.length / pointsPerChunk);
 
-    console.log("📤 傳送中：", message);
-    
-    await txChar.writeValue(new TextEncoder().encode(message));
-    await new Promise(res => setTimeout(res, 100));
+      for (let i = 0; i < landmarks.length; i += pointsPerChunk) {
+        const chunkPoints = landmarks.slice(i, i + pointsPerChunk);
+        const chunkStr = chunkPoints
+        .map(pt => `${pt.x.toFixed(2)},${pt.y.toFixed(2)}`)
+        .join("|");
+
+       const chunkIndex = Math.floor(i / pointsPerChunk) + 1;
+       const header = `CHUNK:${chunkIndex}/${totalChunks}`;
+       const message = `${header}|${chunkStr}`;
+
+       console.log("📤 傳送中：", message);  // 除錯用
+       await txChar.writeValue(new TextEncoder().encode(message));
+       await new Promise(res => setTimeout(res, 100)); // 控制傳送節奏
   }
-  console.log("📡 已分批傳送 68 個特徵點資料至 ESP32");
+
+  console.log("📡 所有特徵點傳送完成");
 }
+
 
     
     connectBtn.addEventListener("click", connectBLE);
