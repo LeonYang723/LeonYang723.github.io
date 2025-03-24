@@ -1,46 +1,71 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>ESP32 Face Landmark</title>
   <script src="./face-api.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
-    video, canvas {
-      position: absolute;
-      top: 60px;
-      left: 0;
-    }
     body {
-      padding: 20px;
-      font-family: Arial;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background-color: #f5f5f5;
+    }
+    h3 {
+      margin-top: 20px;
     }
     button {
-      margin-right: 10px;
-      padding: 10px;
+      padding: 14px 24px;
+      margin: 10px;
+      font-size: 18px;
+      border-radius: 8px;
+      border: none;
+      background-color: #007bff;
+      color: white;
       cursor: pointer;
+    }
+    button:disabled {
+      background-color: #aaa;
+      cursor: not-allowed;
+    }
+    #videoContainer {
       position: relative;
-      z-index: 10;
+      display: flex;
+      justify-content: center;
+      margin-top: 10px;
+    }
+    video, canvas {
+      border-radius: 10px;
+      max-width: 100%;
+      height: auto;
     }
   </style>
 </head>
 <body>
-  <h3>ESP32 人臉 68 特徵點 BLE</h3>
+  <h3>ESP32 人臉特徵點偵測</h3>
   <button id="connectBtn">🔗 連接 BLE</button>
   <button id="detectBtn" disabled>📷 開始偵測</button>
 
-  <video id="video" autoplay muted playsinline width="640" height="480"></video>
-  <canvas id="overlay" width="640" height="480"></canvas>
+  <div id="videoContainer">
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="overlay"></canvas>
+  </div>
 
   <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('overlay');
     const ctx = canvas.getContext('2d');
+
     const connectBtn = document.getElementById('connectBtn');
     const detectBtn = document.getElementById('detectBtn');
 
+    let UARTService = null;
     const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
     const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
-    let UARTService = null;
 
     async function connectBLE() {
       try {
@@ -51,23 +76,35 @@
         });
         const server = await device.gatt.connect();
         UARTService = await server.getPrimaryService(UART_SERVICE);
-        console.log("✅ BLE 連接成功");
+        console.log("✅ BLE 已連線");
         detectBtn.disabled = false;
         startVideo();
       } catch (e) {
-        console.error("❌ BLE 連接錯誤:", e);
-        alert("無法連接 BLE 裝置");
+        console.error("❌ BLE 連接失敗:", e);
+        alert("BLE 連接失敗，請檢查藍牙設備是否開啟");
       }
     }
 
     async function startVideo() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
         video.srcObject = stream;
+        video.onloadedmetadata = () => {
+          video.play();
+          updateCanvasSize();
+        };
+        console.log("📷 攝影機啟動成功");
       } catch (err) {
-        console.error("❌ 操作相機失敗:", err);
-        alert("請授權使用相機");
+        alert("⚠️ 請允許相機權限");
+        console.error(err);
       }
+    }
+
+    function updateCanvasSize() {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.style.width = video.clientWidth + "px";
+      canvas.style.height = video.clientHeight + "px";
     }
 
     async function loadModels() {
@@ -77,15 +114,18 @@
     }
 
     async function detectLandmarks() {
-      console.log("🔍 detectLandmarks 啟用");
       const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
       if (!detection) {
-        console.log("⚠️ 未偵測到人臉");
+        console.log("😕 未偵測到人臉");
         return;
       }
-      const landmarks = detection.landmarks.positions;
-      console.log("🎯 偵測到特徵點數:", landmarks.length);
 
+      const displaySize = { width: video.videoWidth, height: video.videoHeight };
+      faceapi.matchDimensions(canvas, displaySize);
+      const resized = faceapi.resizeResults(detection, displaySize);
+      const landmarks = resized.landmarks.positions;
+
+      console.log("🎯 偵測到 {} 個特徵點".format ? landmarks.length : `${landmarks.length}`);
       drawLandmarks(landmarks);
       sendToESP32(landmarks);
     }
@@ -103,6 +143,7 @@
     async function sendToESP32(landmarks) {
       if (!UARTService) return;
       const txChar = await UARTService.getCharacteristic(RX_UUID);
+
       const chunkSize = 17;
       const totalChunks = Math.ceil(landmarks.length / chunkSize);
 
@@ -111,11 +152,11 @@
         const chunk = landmarks
           .slice(i, i + chunkSize)
           .map(pt => `${pt.x.toFixed(2)},${pt.y.toFixed(2)}`)
-          .join('|');
+          .join("|");
         const msg = `CHUNK:${chunkIndex}/${totalChunks}|${chunk}`;
-        console.log(`📤 傳送:`, msg);
+        console.log("📤 傳送片段:", msg);
         await txChar.writeValue(new TextEncoder().encode(msg));
-        await new Promise(res => setTimeout(res, 200));
+        await new Promise(res => setTimeout(res, 120));
       }
     }
 
