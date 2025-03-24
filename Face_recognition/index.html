@@ -36,29 +36,25 @@
       color: white;
       cursor: pointer;
     }
-#videoContainer {
-  position: relative;
-  width: 100%;
-  max-width: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  overflow: hidden;
-}
-
-video, canvas {
-  display: block;
-  width: 100vw;           /* 使用整個螢幕寬度 */
-  height: auto;
-  max-width: 640px;       /* 避免在大螢幕時過大 */
-  border-radius: 12px;
-  object-fit: contain;    /* 防止壓縮變形 */
-}
-
-
+    #videoContainer {
+      position: relative;
+      width: 100vw;
+      max-width: 100vw;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    video, canvas {
+      display: block;
+      width: 100vw;
+      height: auto;
+      max-width: 100vw;
+      border-radius: 12px;
+      object-fit: contain;
+    }
     video {
       background: black;
-      display: none;
     }
   </style>
 </head>
@@ -109,22 +105,16 @@ video, canvas {
         video.srcObject = stream;
 
         video.onloadedmetadata = () => {
-          const w = video.videoWidth || 640;
-          const h = video.videoHeight || 480;
-
           video.style.display = "block";
+          video.play();
+
+          // 設定 canvas 大小與位置一致
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
-          canvas.style.width = "100vw";
-          canvas.style.height = "auto";
+          canvas.style.width = video.style.width = "100vw";
+          canvas.style.height = video.style.height = "auto";
 
-          video.style.width = w + "px";
-          video.style.height = h + "px";
-          canvas.style.width = w + "px";
-          canvas.style.height = h + "px";
-
-          video.play();
-          console.log("✅ 攝影機啟動完成，尺寸為", w, "x", h);
+          console.log("✅ 攝影機啟動完成，尺寸為", video.videoWidth, "x", video.videoHeight);
         };
       } catch (err) {
         alert("❌ 攝影機無法啟動，請確認權限允許！");
@@ -149,8 +139,8 @@ video, canvas {
       }
 
       const resized = faceapi.resizeResults(result, {
-        width: video.width,
-        height: video.height,
+        width: video.videoWidth,
+        height: video.videoHeight,
       });
 
       const landmarks = resized.landmarks.positions;
@@ -188,7 +178,7 @@ video, canvas {
       const imageData = canvas.toDataURL('image/png');
       const repo = "LeonYang723.github.io";
       const owner = "LeonYang723";
-      const token = "ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXX"; // ← 建議換成安全變數
+      const token = "ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXX";
       const fileName = `face_capture_${Date.now()}.png`;
       const content = imageData.split(",")[1];
 
