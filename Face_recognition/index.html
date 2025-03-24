@@ -14,7 +14,6 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: flex-start;
     }
     h2 {
       margin-bottom: 20px;
@@ -24,6 +23,8 @@
       display: flex;
       flex-direction: row;
       gap: 10px;
+      justify-content: center;
+      width: 100%;
     }
     button {
       padding: 12px 24px;
@@ -36,22 +37,18 @@
     }
     #videoContainer {
       position: relative;
-      display: flex;
-      justify-content: flex-start; /* 鏡頭靠左 */
-      align-items: center;
       width: 100%;
-      max-width: 100%;
-      overflow: hidden;
+      max-width: 640px;
+      margin: 0 auto;
     }
     video, canvas {
+      width: 100%;
+      height: auto;
+      border-radius: 12px;
+      display: block;
       position: absolute;
       top: 0;
       left: 0;
-      border-radius: 12px;
-    }
-    video {
-      background: black;
-      display: none;
     }
   </style>
 </head>
@@ -105,16 +102,13 @@
           const h = video.videoHeight || 480;
 
           video.style.display = "block";
-          video.width = w;
-          video.height = h;
-          canvas.width = w;
-          canvas.height = h;
-          video.style.width = w + "px";
-          video.style.height = h + "px";
-          canvas.style.width = w + "px";
-          canvas.style.height = h + "px";
-
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
           video.play();
+
+          canvas.style.width = video.offsetWidth + "px";
+          canvas.style.height = video.offsetHeight + "px";
+
           console.log("✅ 攝影機啟動完成，尺寸為", w, "x", h);
         };
       } catch (err) {
@@ -140,8 +134,8 @@
       }
 
       const resized = faceapi.resizeResults(result, {
-        width: video.width,
-        height: video.height,
+        width: video.videoWidth,
+        height: video.videoHeight,
       });
 
       const landmarks = resized.landmarks.positions;
