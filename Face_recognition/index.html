@@ -37,8 +37,11 @@
     #videoContainer {
       position: relative;
       display: flex;
-      justify-content: center;
+      justify-content: flex-start; /* 鏡頭靠左 */
       align-items: center;
+      width: 100%;
+      max-width: 100%;
+      overflow: hidden;
     }
     video, canvas {
       position: absolute;
