@@ -157,7 +157,7 @@
       if (!UARTService) return;
       const txChar = await UARTService.getCharacteristic(RX_UUID);
 
-      const pointsPerChunk = 1;  // 一個 chunk 傳 4 筆點資料
+      const pointsPerChunk = 2;  // 一個 chunk 傳 2 筆點資料
       const totalChunks = Math.ceil(landmarks.length / pointsPerChunk);
 
       for (let i = 0; i < landmarks.length; i += pointsPerChunk) {
