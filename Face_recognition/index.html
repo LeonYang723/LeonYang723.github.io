@@ -11,7 +11,10 @@
       margin: 0;
       padding: 20px;
       background: #f0f0f0;
-      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
     }
     h2 {
       margin-bottom: 20px;
@@ -24,11 +27,13 @@
       background-color: #007bff;
       color: white;
       cursor: pointer;
-      margin-bottom: 20px;
+      margin: 10px;
     }
     #videoContainer {
       position: relative;
-      display: inline-block;
+      display: flex;
+      justify-content: center;
+      align-items: center;
     }
     video, canvas {
       position: absolute;
