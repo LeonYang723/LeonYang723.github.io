@@ -37,22 +37,29 @@
       cursor: pointer;
     }
     #videoContainer {
-      position: relative;
-      width: 100vw;
-      max-width: 100vw;
-      overflow: hidden;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-    video, canvas {
-      display: block;
-      width: 100vw;
-      height: auto;
-      max-width: 100vw;
-      border-radius: 12px;
-      object-fit: contain;
-    }
+  position: relative;
+  width: 100vw;
+  max-width: 100%;
+  aspect-ratio: 3 / 4;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0 auto;
+  background: black;
+}
+video, canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 12px;
+}
+video {
+  display: none;
+}
+
     video {
       background: black;
     }
@@ -98,29 +105,23 @@
         alert("❌ 藍牙連接失敗：" + err);
       }
     }
+        async function startVideo() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+    video.srcObject = stream;
+    video.style.display = "block";
 
-    async function startVideo() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-        video.srcObject = stream;
-
-        video.onloadedmetadata = () => {
-          video.style.display = "block";
-          video.play();
-
-          // 設定 canvas 大小與位置一致
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          canvas.style.width = video.style.width = "100vw";
-          canvas.style.height = video.style.height = "auto";
-
-          console.log("✅ 攝影機啟動完成，尺寸為", video.videoWidth, "x", video.videoHeight);
-        };
-      } catch (err) {
-        alert("❌ 攝影機無法啟動，請確認權限允許！");
-        console.error(err);
-      }
-    }
+    video.onloadedmetadata = () => {
+      video.play();
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      console.log("✅ 攝影機啟動完成！");
+    };
+  } catch (err) {
+    alert("❌ 攝影機無法啟動，請確認權限！");
+    console.error(err);
+  }
+}
 
     async function loadModels() {
       await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
