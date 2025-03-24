@@ -7,13 +7,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     body {
-      font-family: Arial, sans-serif;
       margin: 0;
-      padding: 10px;
+      font-family: Arial, sans-serif;
       display: flex;
       flex-direction: column;
       align-items: center;
-      background-color: #f5f5f5;
+      background: #f9f9f9;
     }
     h3 {
       margin-top: 20px;
@@ -22,23 +21,26 @@
       padding: 14px 24px;
       margin: 10px;
       font-size: 18px;
-      border-radius: 8px;
       border: none;
+      border-radius: 8px;
       background-color: #007bff;
       color: white;
       cursor: pointer;
     }
     button:disabled {
       background-color: #aaa;
-      cursor: not-allowed;
     }
     #videoContainer {
       position: relative;
       display: flex;
       justify-content: center;
-      margin-top: 10px;
+      align-items: center;
+      max-width: 100%;
     }
     video, canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
       border-radius: 10px;
       max-width: 100%;
       height: auto;
@@ -69,18 +71,18 @@
 
     async function connectBLE() {
       try {
-        console.log("🔵 BLE 開始連接...");
+        console.log("🔵 開始連接 BLE...");
         const device = await navigator.bluetooth.requestDevice({
           acceptAllDevices: true,
           optionalServices: [UART_SERVICE],
         });
         const server = await device.gatt.connect();
         UARTService = await server.getPrimaryService(UART_SERVICE);
-        console.log("✅ BLE 已連線");
+        console.log("✅ BLE 已連線！");
         detectBtn.disabled = false;
         startVideo();
       } catch (e) {
-        console.error("❌ BLE 連接失敗:", e);
+        console.error("❌ BLE 連線失敗:", e);
         alert("BLE 連接失敗，請檢查藍牙設備是否開啟");
       }
     }
@@ -89,22 +91,24 @@
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
         video.srcObject = stream;
+
         video.onloadedmetadata = () => {
           video.play();
-          updateCanvasSize();
+
+          // 同步 canvas 尺寸與 video 實際解析度
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+
+          // 同步 CSS 尺寸
+          canvas.style.width = video.clientWidth + 'px';
+          canvas.style.height = video.clientHeight + 'px';
+          video.style.width = video.clientWidth + 'px';
+          video.style.height = video.clientHeight + 'px';
         };
-        console.log("📷 攝影機啟動成功");
       } catch (err) {
         alert("⚠️ 請允許相機權限");
         console.error(err);
       }
-    }
-
-    function updateCanvasSize() {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.style.width = video.clientWidth + "px";
-      canvas.style.height = video.clientHeight + "px";
     }
 
     async function loadModels() {
@@ -114,7 +118,12 @@
     }
 
     async function detectLandmarks() {
-      const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
+      if (!video || !video.srcObject) return;
+
+      const detection = await faceapi
+        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+        .withFaceLandmarks();
+
       if (!detection) {
         console.log("😕 未偵測到人臉");
         return;
@@ -125,7 +134,6 @@
       const resized = faceapi.resizeResults(detection, displaySize);
       const landmarks = resized.landmarks.positions;
 
-      console.log("🎯 偵測到 {} 個特徵點".format ? landmarks.length : `${landmarks.length}`);
       drawLandmarks(landmarks);
       sendToESP32(landmarks);
     }
@@ -143,7 +151,6 @@
     async function sendToESP32(landmarks) {
       if (!UARTService) return;
       const txChar = await UARTService.getCharacteristic(RX_UUID);
-
       const chunkSize = 17;
       const totalChunks = Math.ceil(landmarks.length / chunkSize);
 
@@ -154,9 +161,8 @@
           .map(pt => `${pt.x.toFixed(2)},${pt.y.toFixed(2)}`)
           .join("|");
         const msg = `CHUNK:${chunkIndex}/${totalChunks}|${chunk}`;
-        console.log("📤 傳送片段:", msg);
         await txChar.writeValue(new TextEncoder().encode(msg));
-        await new Promise(res => setTimeout(res, 120));
+        await new Promise(res => setTimeout(res, 100));
       }
     }
 
@@ -168,3 +174,4 @@
   </script>
 </body>
 </html>
+
