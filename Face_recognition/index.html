@@ -82,21 +82,40 @@
     const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 
     async function connectBLE() {
-      try {
-        const device = await navigator.bluetooth.requestDevice({
-          acceptAllDevices: true,
-          optionalServices: [UART_SERVICE],
-        });
-        const server = await device.gatt.connect();
-        UARTService = await server.getPrimaryService(UART_SERVICE);
-        console.log("✅ BLE 已連線！");
+  try {
+    const device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: [UART_SERVICE],
+    });
+    const server = await device.gatt.connect();
+    UARTService = await server.getPrimaryService(UART_SERVICE);
+    console.log("✅ BLE 已連線！");
 
-        detectBtn.disabled = false;
-        await startVideo();
-      } catch (err) {
-        alert("❌ 藍牙連接失敗：" + err);
-      }
-    }
+    detectBtn.disabled = false;
+    await startVideo(); // ⬅️ 確保呼叫鏡頭
+  } catch (err) {
+    alert("❌ 藍牙連接失敗：" + err);
+  }
+}
+
+async function startVideo() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    video.srcObject = stream;
+    video.style.display = "block"; // ⬅️ 顯示 video
+    video.onloadedmetadata = () => {
+      video.play();
+      video.width = video.videoWidth;
+      video.height = video.videoHeight;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    };
+  } catch (err) {
+    alert("❌ 攝影機無法啟動，請確認權限！");
+    console.error(err);
+  }
+}
+
 
     async function startVideo() {
       try {
