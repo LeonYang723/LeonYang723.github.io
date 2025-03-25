@@ -23,9 +23,9 @@
       display: flex;
       flex-direction: row;
       gap: 10px;
+      flex-wrap: wrap;
       justify-content: center;
       width: 100%;
-      flex-wrap: wrap;
     }
     button {
       padding: 12px 24px;
@@ -41,25 +41,17 @@
       width: 100%;
       max-width: 640px;
       margin: 0 auto;
-      aspect-ratio: 4 / 3;
       background: black;
     }
     video, canvas {
       width: 100%;
-      height: 100%;
+      height: auto;
       border-radius: 12px;
       display: block;
       position: absolute;
       top: 0;
       left: 0;
       object-fit: cover;
-    }
-    canvas {
-      pointer-events: none;
-      z-index: 2;
-    }
-    video {
-      z-index: 1;
     }
   </style>
 </head>
@@ -68,6 +60,7 @@
   <div class="btn-container">
     <button id="connectBtn">🔗 連接 BLE</button>
     <button id="detectBtn" disabled>🔍 開始偵測</button>
+    <button onclick="captureAndUploadCanvas()">📸 擷取並上傳畫面</button>
   </div>
 
   <div id="videoContainer">
@@ -107,15 +100,18 @@
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
         video.srcObject = stream;
-        video.style.display = "block";
-        video.style.visibility = "visible";
 
         video.onloadedmetadata = () => {
           const w = video.videoWidth || 640;
           const h = video.videoHeight || 480;
 
-          canvas.width = w;
-          canvas.height = h;
+          video.style.display = "block";
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          video.play();
+
+          canvas.style.width = video.offsetWidth + "px";
+          canvas.style.height = video.offsetHeight + "px";
 
           console.log("✅ 攝影機啟動完成，尺寸為", w, "x", h);
         };
@@ -184,6 +180,34 @@
       }
 
       console.log("📡 所有特徵點傳送完成");
+    }
+
+    async function captureAndUploadCanvas() {
+      const imageData = canvas.toDataURL('image/png');
+      const repo = "LeonYang723.github.io";
+      const owner = "LeonYang723";
+      const token = "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"; // ⚠️ 建議改用 .env 或 server 安全處理
+      const fileName = `face_capture_${Date.now()}.png`;
+      const content = imageData.split(",")[1];
+
+      const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/captures/${fileName}`, {
+        method: "PUT",
+        headers: {
+          "Authorization": `token ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          message: "upload face capture",
+          content: content
+        })
+      });
+
+      const result = await response.json();
+      if (response.ok) {
+        console.log("✅ 已成功上傳圖片到 GitHub！網址：", result.content.download_url);
+      } else {
+        console.error("❌ 上傳失敗", result);
+      }
     }
 
     connectBtn.addEventListener("click", connectBLE);
