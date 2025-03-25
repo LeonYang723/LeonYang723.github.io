@@ -23,9 +23,9 @@
       margin-bottom: 20px;
       display: flex;
       flex-direction: row;
-      gap: 10px;
       flex-wrap: wrap;
       justify-content: center;
+      gap: 10px;
     }
     button {
       padding: 12px 24px;
@@ -37,31 +37,21 @@
       cursor: pointer;
     }
     #videoContainer {
-  position: relative;
-  width: 100vw;
-  max-width: 100%;
-  aspect-ratio: 3 / 4;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin: 0 auto;
-  background: black;
-}
-video, canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 12px;
-}
-video {
-  display: none;
-}
-
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      max-width: 100%;
+      overflow: hidden;
+    }
+    video, canvas {
+      border-radius: 12px;
+      width: 100vw;
+      height: auto;
+    }
     video {
-      background: black;
+      background: white;
     }
   </style>
 </head>
@@ -105,23 +95,24 @@ video {
         alert("❌ 藍牙連接失敗：" + err);
       }
     }
-        async function startVideo() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-    video.srcObject = stream;
-    video.style.display = "block";
 
-    video.onloadedmetadata = () => {
-      video.play();
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      console.log("✅ 攝影機啟動完成！");
-    };
-  } catch (err) {
-    alert("❌ 攝影機無法啟動，請確認權限！");
-    console.error(err);
-  }
-}
+    async function startVideo() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+        video.style.display = "block";
+        video.onloadedmetadata = () => {
+          video.play();
+          video.width = video.videoWidth;
+          video.height = video.videoHeight;
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+        };
+      } catch (err) {
+        alert("❌ 攝影機無法啟動，請確認權限！");
+        console.error(err);
+      }
+    }
 
     async function loadModels() {
       await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
@@ -179,11 +170,12 @@ video {
       const imageData = canvas.toDataURL('image/png');
       const repo = "LeonYang723.github.io";
       const owner = "LeonYang723";
-      const token = "ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+      const token = "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";
       const fileName = `face_capture_${Date.now()}.png`;
       const content = imageData.split(",")[1];
 
-      const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/captures/${fileName}`, {
+      const apiURL = `https://api.github.com/repos/${owner}/${repo}/contents/captures/${fileName}`;
+      const response = await fetch(apiURL, {
         method: "PUT",
         headers: {
           "Authorization": `token ${token}`,
@@ -197,9 +189,10 @@ video {
 
       const result = await response.json();
       if (response.ok) {
-        console.log("✅ 已成功上傳圖片到 GitHub！網址：", result.content.download_url);
+        console.log("✅ 已成功上傳圖片到 GitHub：", result.content.download_url);
       } else {
-        console.error("❌ 上傳失敗", result);
+        console.error("❌ 上傳失敗，錯誤訊息：", result);
+        alert("❌ 上傳失敗：" + (result.message || "未知錯誤"));
       }
     }
 
