@@ -167,34 +167,40 @@
     }
 
     async function captureAndUploadCanvas() {
-      const imageData = canvas.toDataURL('image/png');
-      const repo = "LeonYang723.github.io";
-      const owner = "LeonYang723";
-      const token = "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";
-      const fileName = `face_capture_${Date.now()}.png`;
-      const content = imageData.split(",")[1];
+  const imageData = canvas.toDataURL("image/png");
+  const base64Content = imageData.split(",")[1];
 
-      const apiURL = `https://api.github.com/repos/${owner}/${repo}/contents/captures/${fileName}`;
-      const response = await fetch(apiURL, {
-        method: "PUT",
-        headers: {
-          "Authorization": `token ${token}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          message: "upload face capture",
-          content: content
-        })
-      });
+  const owner = "LeonYang723";
+  const repo = "LeonYang723.github.io";
+  const path = "Face_recognition/captures";
+  const fileName = `face_${Date.now()}.png`;
 
-      const result = await response.json();
-      if (response.ok) {
-        console.log("✅ 已成功上傳圖片到 GitHub：", result.content.download_url);
-      } else {
-        console.error("❌ 上傳失敗，錯誤訊息：", result);
-        alert("❌ 上傳失敗：" + (result.message || "未知錯誤"));
-      }
-    }
+  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}/${fileName}`;
+  const token = "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";
+
+  const response = await fetch(apiUrl, {
+    method: "PUT",
+    headers: {
+      "Authorization": `token ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      message: "upload face capture",
+      content: base64Content
+    })
+  });
+
+  const result = await response.json();
+  if (response.ok && result.content && result.content.download_url) {
+    const url = result.content.download_url;
+    console.log("✅ 圖片上傳成功：", url);
+    alert("✅ 圖片已上傳！\n\n" + url);
+  } else {
+    console.error("❌ 上傳失敗：", result);
+    alert("❌ 上傳失敗，請查看 console 錯誤訊息");
+  }
+}
+
 
     connectBtn.addEventListener("click", connectBLE);
     detectBtn.addEventListener("click", detectLandmarks);
