@@ -23,9 +23,9 @@
       margin-bottom: 20px;
       display: flex;
       flex-direction: row;
+      gap: 10px;
       flex-wrap: wrap;
       justify-content: center;
-      gap: 10px;
     }
     button {
       padding: 12px 24px;
@@ -46,9 +46,10 @@
       overflow: hidden;
     }
     video, canvas {
-      border-radius: 12px;
-      width: 100vw;
+      max-width: 100%;
       height: auto;
+      border-radius: 12px;
+      display: block;
     }
     video {
       background: black;
@@ -98,18 +99,25 @@
 
     async function startVideo() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
         video.srcObject = stream;
-        video.style.display = "block";
+
         video.onloadedmetadata = () => {
+          const w = video.videoWidth || 640;
+          const h = video.videoHeight || 480;
+
+          video.width = w;
+          video.height = h;
+          canvas.width = w;
+          canvas.height = h;
+          video.style.display = "block";
+          canvas.style.display = "block";
+
           video.play();
-          video.width = video.videoWidth;
-          video.height = video.videoHeight;
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
+          console.log("✅ 攝影機啟動完成，尺寸為", w, "x", h);
         };
       } catch (err) {
-        alert("❌ 攝影機無法啟動，請確認權限！");
+        alert("❌ 攝影機無法啟動，請確認權限允許！");
         console.error(err);
       }
     }
@@ -131,8 +139,8 @@
       }
 
       const resized = faceapi.resizeResults(result, {
-        width: video.videoWidth,
-        height: video.videoHeight,
+        width: video.width,
+        height: video.height,
       });
 
       const landmarks = resized.landmarks.positions;
@@ -167,40 +175,39 @@
     }
 
     async function captureAndUploadCanvas() {
-  const imageData = canvas.toDataURL("image/png");
-  const base64Content = imageData.split(",")[1];
+      const imageData = canvas.toDataURL("image/png");
+      const base64Content = imageData.split(",")[1];
 
-  const owner = "LeonYang723";
-  const repo = "LeonYang723.github.io";
-  const path = "Face_recognition/captures";
-  const fileName = `face_${Date.now()}.png`;
+      const owner = "LeonYang723";
+      const repo = "LeonYang723.github.io";
+      const path = "Face_recognition/captures";
+      const fileName = `face_${Date.now()}.png`;
 
-  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}/${fileName}`;
-  const token = "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";
+      const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}/${fileName}`;
+      const token = "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";
 
-  const response = await fetch(apiUrl, {
-    method: "PUT",
-    headers: {
-      "Authorization": `token ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      message: "upload face capture",
-      content: base64Content
-    })
-  });
+      const response = await fetch(apiUrl, {
+        method: "PUT",
+        headers: {
+          "Authorization": `token ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          message: "upload face capture",
+          content: base64Content
+        })
+      });
 
-  const result = await response.json();
-  if (response.ok && result.content && result.content.download_url) {
-    const url = result.content.download_url;
-    console.log("✅ 圖片上傳成功：", url);
-    alert("✅ 圖片已上傳！\n\n" + url);
-  } else {
-    console.error("❌ 上傳失敗：", result);
-    alert("❌ 上傳失敗，請查看 console 錯誤訊息");
-  }
-}
-
+      const result = await response.json();
+      if (response.ok && result.content && result.content.download_url) {
+        const url = result.content.download_url;
+        console.log("✅ 圖片上傳成功：", url);
+        alert("✅ 圖片已上傳！\n\n" + url);
+      } else {
+        console.error("❌ 上傳失敗：", result);
+        alert("❌ 上傳失敗，請查看 console 錯誤訊息");
+      }
+    }
 
     connectBtn.addEventListener("click", connectBLE);
     detectBtn.addEventListener("click", detectLandmarks);
