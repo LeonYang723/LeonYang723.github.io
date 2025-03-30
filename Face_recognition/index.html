@@ -8,48 +8,64 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      text-align: center;
       margin: 0;
       padding: 20px;
-      background-color: #f4f4f4;
+      background-color: #f0f0f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
+
     h2 {
       margin-bottom: 20px;
     }
-    video, canvas {
-      border-radius: 10px;
-      margin-top: 10px;
-      max-width: 100%;
-      height: auto;
+
+    .btn-container {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
     }
+
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      background-color: #007bff;
+      color: white;
+      cursor: pointer;
+    }
+
     #videoContainer {
       position: relative;
-      display: inline-block;
+      width: 100%;
+      max-width: 640px;
     }
-    canvas {
+
+    video, canvas {
+      width: 100%;
+      height: auto;
+      border-radius: 12px;
+      display: block;
       position: absolute;
       top: 0;
       left: 0;
     }
-    button {
-      padding: 10px 20px;
-      font-size: 16px;
-      margin: 5px;
-      cursor: pointer;
-      border: none;
-      border-radius: 6px;
-      background-color: #007bff;
-      color: white;
+
+    canvas {
+      z-index: 1;
     }
   </style>
 </head>
 <body>
   <h2>🔐 臉部辨識門鎖</h2>
-  <button id="connectBtn">🔗 連接 ESP32</button>
-  <button id="identifyBtn" disabled>🧠 辨識</button>
+  <div class="btn-container">
+    <button id="connectBtn">🔗 連接 ESP32</button>
+    <button id="identifyBtn" disabled>🧠 開始辨識</button>
+  </div>
 
   <div id="videoContainer">
-    <video id="video" autoplay muted playsinline width="320" height="240"></video>
+    <video id="video" autoplay muted playsinline></video>
     <canvas id="overlay"></canvas>
   </div>
 
@@ -57,6 +73,7 @@
     const video = document.getElementById("video");
     const canvas = document.getElementById("overlay");
     const ctx = canvas.getContext("2d");
+    const connectBtn = document.getElementById("connectBtn");
     const identifyBtn = document.getElementById("identifyBtn");
 
     let UARTService;
@@ -65,70 +82,78 @@
 
     async function loadModels() {
       await faceapi.nets.tinyFaceDetector.loadFromUri('./models');
-      await faceapi.nets.faceRecognitionNet.loadFromUri('./models');
       await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
-      console.log("✅ 模型載入完成！");
+      await faceapi.nets.faceRecognitionNet.loadFromUri('./models');
+      console.log("✅ 模型載入完成");
     }
 
     async function startVideo() {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      video.srcObject = stream;
-
-      video.onloadedmetadata = () => {
-        video.play();
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        console.log("🎥 攝影機啟動");
-      };
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+        video.srcObject = stream;
+        video.onloadedmetadata = () => {
+          video.play();
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+        };
+      } catch (err) {
+        alert("❌ 無法啟動攝影機：" + err);
+      }
     }
 
     async function connectBLE() {
       try {
         const device = await navigator.bluetooth.requestDevice({
           acceptAllDevices: true,
-          optionalServices: [UART_SERVICE],
+          optionalServices: [UART_SERVICE]
         });
         const server = await device.gatt.connect();
         UARTService = await server.getPrimaryService(UART_SERVICE);
+        console.log("✅ 已連線 ESP32");
         identifyBtn.disabled = false;
-        console.log("✅ ESP32 已連線");
-      } catch (e) {
-        alert("❌ 藍牙連線失敗：" + e);
+        await startVideo();
+      } catch (err) {
+        alert("❌ 藍牙連接失敗：" + err);
       }
     }
 
     async function identifyFace() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      try {
+        const result = await faceapi
+          .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks()
+          .withFaceDescriptor();
 
-      const result = await faceapi
-        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-        .withFaceLandmarks()
-        .withFaceDescriptor();
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      if (!result) {
-        alert("😕 沒有偵測到人臉，請靠近一點再試試！");
-        return;
+        if (!result) {
+          alert("😕 沒有偵測到人臉，請靠近一點！");
+          return;
+        }
+
+        const resized = faceapi.resizeResults(result, {
+          width: canvas.width,
+          height: canvas.height
+        });
+
+        faceapi.draw.drawDetections(canvas, resized);
+        faceapi.draw.drawFaceLandmarks(canvas, resized);
+
+        const descriptor = result.descriptor.map(x => x.toFixed(5)).join(",");
+        const txChar = await UARTService.getCharacteristic(RX_UUID);
+        await txChar.writeValue(new TextEncoder().encode(descriptor));
+        console.log("📡 特徵向量已傳送 ESP32");
+
+      } catch (err) {
+        console.error("❌ 辨識錯誤：", err);
+        alert("辨識失敗，請重新再試！");
       }
-
-      // 畫出人臉框
-      const resized = faceapi.resizeResults(result, {
-        width: video.videoWidth,
-        height: video.videoHeight,
-      });
-      faceapi.draw.drawDetections(canvas, resized);
-      faceapi.draw.drawFaceLandmarks(canvas, resized);
-
-      const descriptor = result.descriptor.map(x => x.toFixed(5)).join(",");
-      const txChar = await UARTService.getCharacteristic(RX_UUID);
-      await txChar.writeValue(new TextEncoder().encode(descriptor));
-      console.log("📡 已傳送 128 維特徵向量");
     }
 
-    document.getElementById("connectBtn").onclick = connectBLE;
-    document.getElementById("identifyBtn").onclick = identifyFace;
+    connectBtn.addEventListener("click", connectBLE);
+    identifyBtn.addEventListener("click", identifyFace);
 
     loadModels();
-    startVideo();
   </script>
 </body>
 </html>
