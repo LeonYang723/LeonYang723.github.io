@@ -1,99 +1,62 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ESP32 臉部向量傳送</title>
+  <title>ESP32 人臉辨識門鎖</title>
   <script src="./face-api.min.js"></script>
-  <style>
-    body { text-align: center; font-family: sans-serif; background: #f0f0f0; padding: 20px; }
-    button { padding: 10px 20px; margin: 10px; font-size: 18px; }
-    video { width: 100%; max-width: 400px; border-radius: 12px; margin-top: 10px; }
-  </style>
 </head>
 <body>
-  <h2>ESP32 臉部向量傳送</h2>
-  <button id="connectBtn">🔗 連接 BLE</button>
-  <button id="sendBtn" disabled>📤 傳送臉部向量</button>
-  <video id="video" autoplay muted playsinline></video>
+  <h2>🔐 臉部辨識門鎖</h2>
+  <button id="connectBtn">🔗 連接 ESP32</button>
+  <button id="identifyBtn" disabled>🧠 辨識</button>
+  <video id="video" autoplay muted playsinline width="320" height="240"></video>
 
   <script>
+    const video = document.getElementById("video");
+    let UARTService;
     const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
     const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 
-    let UARTService = null;
-    const video = document.getElementById("video");
+    async function loadModels() {
+      await faceapi.nets.tinyFaceDetector.loadFromUri('./models');
+      await faceapi.nets.faceRecognitionNet.loadFromUri('./models');
+      await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
+      console.log("✅ 模型載入完成！");
+    }
 
-    // 啟用鏡頭
     async function startVideo() {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       video.srcObject = stream;
     }
 
-    // 載入模型
-    async function loadModels() {
-      await faceapi.nets.tinyFaceDetector.loadFromUri('./models');
-      await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
-      await faceapi.nets.faceRecognitionNet.loadFromUri('./models');
-      console.log("✅ 模型載入完成");
-    }
-
-    // BLE 藍牙連線
     async function connectBLE() {
       const device = await navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
-        optionalServices: [UART_SERVICE]
+        optionalServices: [UART_SERVICE],
       });
       const server = await device.gatt.connect();
       UARTService = await server.getPrimaryService(UART_SERVICE);
-      console.log("✅ ESP32 藍牙已連線");
-      document.getElementById("sendBtn").disabled = false;
+      document.getElementById("identifyBtn").disabled = false;
+      console.log("✅ ESP32 已連線");
     }
 
-    // 抓臉部向量
-    async function getFaceVector() {
-      const detection = await faceapi
+    async function identifyFace() {
+      const result = await faceapi
         .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
         .withFaceLandmarks()
         .withFaceDescriptor();
 
-      if (!detection) {
-        console.log("❌ 沒有偵測到人臉");
-        return null;
-      }
+      if (!result) return alert("😕 無法辨識到人臉");
 
-      return detection.descriptor; // 128 維向量
-    }
-
-    // 傳送向量
-    async function sendVectorToESP32(descriptor) {
+      const descriptor = result.descriptor.map(x => x.toFixed(5)).join(",");
       const txChar = await UARTService.getCharacteristic(RX_UUID);
-      const chunks = [];
-
-      // 將每 4 個數值一組分段 (最多 32 組)
-      for (let i = 0; i < descriptor.length; i += 4) {
-        const chunk = descriptor.slice(i, i + 4).map(n => n.toFixed(4)).join(",");
-        const header = `VEC:${Math.floor(i / 4) + 1}/${Math.ceil(descriptor.length / 4)}`;
-        const message = `${header}|${chunk}`;
-        chunks.push(message);
-      }
-
-      for (const msg of chunks) {
-        console.log("📤 傳送：", msg);
-        await txChar.writeValue(new TextEncoder().encode(msg));
-        await new Promise(res => setTimeout(res, 100)); // 小延遲
-      }
-
-      console.log("✅ 全部向量傳送完成");
+      await txChar.writeValue(new TextEncoder().encode(descriptor));
+      console.log("📡 傳送特徵向量成功");
     }
 
-    document.getElementById("connectBtn").addEventListener("click", connectBLE);
-    document.getElementById("sendBtn").addEventListener("click", async () => {
-      const vector = await getFaceVector();
-      if (vector) {
-        await sendVectorToESP32(vector);
-      }
-    });
+    document.getElementById("connectBtn").onclick = connectBLE;
+    document.getElementById("identifyBtn").onclick = identifyFace;
 
     loadModels();
     startVideo();
