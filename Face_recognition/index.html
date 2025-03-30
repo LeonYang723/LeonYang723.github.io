@@ -86,7 +86,7 @@
 
     async function startVideo() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
         video.srcObject = stream;
         video.onloadedmetadata = () => {
           video.play();
@@ -95,6 +95,7 @@
         };
       } catch (err) {
         console.error("❌ 攝影機無法開啟", err);
+        statusEl.innerText = "❌ 攝影機開啟失敗，請檢查權限設定";
       }
     }
 
@@ -108,34 +109,41 @@
         UARTService = await server.getPrimaryService(UART_SERVICE);
         document.getElementById("identifyBtn").disabled = false;
         console.log("✅ ESP32 已連線");
+        statusEl.innerText = "✅ 藍牙已連線";
       } catch (err) {
         console.error("❌ 藍牙連線失敗", err);
+        statusEl.innerText = "❌ 藍牙連接失敗";
       }
     }
 
     async function identifyFace() {
-      const result = await faceapi
-        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-        .withFaceLandmarks()
-        .withFaceDescriptor();
+      try {
+        const result = await faceapi
+          .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 }))
+          .withFaceLandmarks()
+          .withFaceDescriptor();
 
-      if (!result) {
-        statusEl.innerText = "❌ 沒有偵測到人臉，請靠近鏡頭再試試";
-        return;
-      }
+        if (!result) {
+          statusEl.innerText = "❌ 沒有偵測到人臉，請靠近鏡頭再試試";
+          return;
+        }
 
-      const descriptor = result.descriptor;
-      const threshold = 0.6; // 可調整門檻
-      const knownDescriptor = new Float32Array([/* 預設比對向量 */]);
-      const distance = faceapi.euclideanDistance(descriptor, knownDescriptor);
+        const descriptor = result.descriptor;
+        const threshold = 0.6;
+        const knownDescriptor = new Float32Array([/* 在此放置訓練好的 128 維向量 */]);
+        const distance = faceapi.euclideanDistance(descriptor, knownDescriptor);
 
-      const txChar = await UARTService.getCharacteristic(RX_UUID);
-      if (distance < threshold) {
-        await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
-        statusEl.innerText = "✅ 辨識成功，已發送解鎖指令";
-      } else {
-        await txChar.writeValue(new TextEncoder().encode("FAIL"));
-        statusEl.innerText = "❌ 辨識失敗，臉部不符合";
+        const txChar = await UARTService.getCharacteristic(RX_UUID);
+        if (distance < threshold) {
+          await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
+          statusEl.innerText = "✅ 辨識成功，已發送解鎖指令";
+        } else {
+          await txChar.writeValue(new TextEncoder().encode("FAIL"));
+          statusEl.innerText = "❌ 辨識失敗，臉部不符合";
+        }
+      } catch (err) {
+        console.error("辨識錯誤：", err);
+        statusEl.innerText = "❌ 發生錯誤，請稍後再試";
       }
     }
 
