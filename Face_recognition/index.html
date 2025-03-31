@@ -110,17 +110,17 @@
     async function loadReferenceFaces() {
       const labels = ["1", "2", "3"];
       for (let label of labels) {
-        const img = await faceapi.fetchImage(`./faces/${label}.jpg`);
-        const detection = await faceapi
+       const img = await faceapi.fetchImage(`Face_recognition/faces/${label}.jpg`);
+       const detection = await faceapi
           .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
           .withFaceLandmarks()
           .withFaceDescriptor();
 
         if (detection) {
           knownDescriptors.push({ label, descriptor: detection.descriptor });
-          console.log(`✅ 載入 ${label}.png 成功`);
+          console.log(`✅ 載入 ${label}.jpg 成功`);
         } else {
-          console.warn(`⚠️ 無法從 ${label}.png 偵測到人臉`);
+          console.warn(`⚠️ 無法從 ${label}.jpg 偵測到人臉`);
         }
       }
     }
@@ -185,7 +185,7 @@
 
         if (min && min.dist < 0.6) {
           await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
-          statusEl.textContent = `✅ 成功辨識為 ${min.label}.png，門已解鎖`;
+          statusEl.textContent = `✅ 成功辨識為 ${min.label}.jpg，門已解鎖`;
         } else {
           await txChar.writeValue(new TextEncoder().encode("FAIL"));
           statusEl.textContent = "❌ 臉部不符，拒絕解鎖";
