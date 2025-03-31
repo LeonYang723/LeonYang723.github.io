@@ -15,9 +15,7 @@
       flex-direction: column;
       align-items: center;
     }
-    h2 {
-      margin-bottom: 20px;
-    }
+    h2 { margin-bottom: 20px; }
     .btn-container {
       display: flex;
       gap: 10px;
@@ -91,13 +89,12 @@
         await faceapi.nets.tinyFaceDetector.loadFromUri('./models');
         await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
         await faceapi.nets.faceRecognitionNet.loadFromUri('./models');
-
         console.log("✅ 模型載入完成！");
         await loadReferenceFaces();
         statusEl.textContent = "✅ 模型與人臉資料載入完成，請連接 ESP32。";
       } catch (err) {
         console.error("❌ 模型載入失敗：", err);
-        statusEl.textContent = "❌ 模型載入失敗，請檢查 ./models 與 faces 資料夾";
+        statusEl.textContent = "❌ 模型載入失敗，請檢查 models 與 faces 資料夾";
       }
     }
 
@@ -123,7 +120,6 @@
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
         video.srcObject = stream;
-
         video.onloadedmetadata = () => {
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
@@ -155,6 +151,28 @@
       }
     }
 
+    function drawLandmarkLines(landmarks) {
+      const groups = [
+        landmarks.getJawOutline(),
+        landmarks.getLeftEyeBrow(),
+        landmarks.getRightEyeBrow(),
+        landmarks.getNose(),
+        landmarks.getLeftEye(),
+        landmarks.getRightEye(),
+        landmarks.getMouth()
+      ];
+      ctx.strokeStyle = "#ff00ff";
+      ctx.lineWidth = 1.5;
+      groups.forEach(group => {
+        ctx.beginPath();
+        ctx.moveTo(group[0].x, group[0].y);
+        for (let i = 1; i < group.length; i++) {
+          ctx.lineTo(group[i].x, group[i].y);
+        }
+        ctx.stroke();
+      });
+    }
+
     async function identifyFace() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       try {
@@ -173,9 +191,7 @@
           height: canvas.height
         });
 
-        // 畫出 68 點與臉部框
-        faceapi.draw.drawDetections(canvas, resized);
-        faceapi.draw.drawFaceLandmarks(canvas, resized);
+        drawLandmarkLines(resized.landmarks);
 
         const descriptor = result.descriptor;
         const min = knownDescriptors
@@ -185,9 +201,13 @@
           }))
           .sort((a, b) => a.dist - b.dist)[0];
 
-        // 顯示框與傳送訊號
+        // 計算正方形框
+        const box = resized.detection.box;
+        const side = Math.max(box.width, box.height);
+        const squareBox = new faceapi.Box(box.x, box.y, side, side);
         const boxColor = (min && min.dist < 0.6) ? "green" : "red";
-        const drawBox = new faceapi.draw.DrawBox(resized.detection.box, {
+
+        const drawBox = new faceapi.draw.DrawBox(squareBox, {
           label: `${min.label}.jpg (${min.dist.toFixed(2)})`,
           boxColor: boxColor
         });
