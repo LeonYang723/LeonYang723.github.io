@@ -179,21 +179,9 @@
           height: canvas.height
         });
 
-        // 畫 68 點 + 線
-        const landmarks = resized.landmarks.positions;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = "red";
-        ctx.beginPath();
-        landmarks.forEach((pt, i) => {
-          if (i === 0) {
-            ctx.moveTo(pt.x, pt.y);
-          } else {
-            ctx.lineTo(pt.x, pt.y);
-          }
-        });
-        ctx.stroke();
+        faceapi.draw.drawDetections(canvas, resized);
+        faceapi.draw.drawFaceLandmarks(canvas, resized);
 
-        // 比對臉部
         const descriptor = result.descriptor;
         const min = knownDescriptors
           .map(item => ({
@@ -202,25 +190,8 @@
           }))
           .sort((a, b) => a.dist - b.dist)[0];
 
-        // 調整框框
-        const originalBox = resized.detection.box;
-        const shrink = 0.3;
-        const adjustedBox = new faceapi.Box(
-          originalBox.x + originalBox.width * shrink,
-          originalBox.y,
-          originalBox.width * (1 - 2 * shrink),
-          originalBox.height
-        );
-
-        const boxColor = (min && min.dist < 0.6) ? "green" : "red";
-        const drawBox = new faceapi.draw.DrawBox(adjustedBox, {
-          label: `${min.label}.jpg (${min.dist.toFixed(2)})`,
-          boxColor: boxColor
-        });
-        drawBox.draw(canvas);
-
-        // 藍牙傳送
         const txChar = await UARTService.getCharacteristic(RX_UUID);
+
         if (min && min.dist < 0.6) {
           await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
           statusEl.textContent = `✅ 成功辨識為 ${min.label}.jpg，門已解鎖`;
@@ -228,6 +199,7 @@
           await txChar.writeValue(new TextEncoder().encode("FAIL"));
           statusEl.textContent = "❌ 臉部不符，拒絕解鎖";
         }
+
       } catch (err) {
         console.error("❌ 辨識過程錯誤：", err);
         statusEl.textContent = "❌ 辨識失敗，請重試";
