@@ -162,40 +162,49 @@
     }
 
     async function identifyFace() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      try {
-        const result = await faceapi
-          .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-          .withFaceLandmarks()
-          .withFaceDescriptor();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  try {
+    const result = await faceapi
+      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+      .withFaceLandmarks()
+      .withFaceDescriptor();
 
-        if (!result) {
-          statusEl.textContent = "😕 沒有偵測到人臉，請靠近一點...";
-          return;
-        }
-
-        const descriptor = result.descriptor;
-        const min = knownDescriptors
-          .map(item => ({ label: item.label, dist: faceapi.euclideanDistance(descriptor, item.descriptor) }))
-          .sort((a, b) => a.dist - b.dist)[0];
-
-        console.log("🔍 最相近比對:", min);
-
-        const txChar = await UARTService.getCharacteristic(RX_UUID);
-
-        if (min && min.dist < 0.6) {
-          await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
-          statusEl.textContent = `✅ 成功辨識為 ${min.label}.jpg，門已解鎖`;
-        } else {
-          await txChar.writeValue(new TextEncoder().encode("FAIL"));
-          statusEl.textContent = "❌ 臉部不符，拒絕解鎖";
-        }
-
-      } catch (err) {
-        console.error("❌ 辨識過程錯誤：", err);
-        statusEl.textContent = "❌ 辨識失敗，請重試";
-      }
+    if (!result) {
+      statusEl.textContent = "😕 沒有偵測到人臉，請靠近一點...";
+      return;
     }
+
+    const descriptor = result.descriptor;
+    const min = knownDescriptors
+      .map(item => ({
+        label: item.label,
+        dist: faceapi.euclideanDistance(descriptor, item.descriptor)
+      }))
+      .sort((a, b) => a.dist - b.dist)[0];
+
+    console.log("🔍 最相近比對:", min);
+
+    const box = result.detection.box;
+    const drawBox = new faceapi.draw.DrawBox(box, {
+      label: `${min.label} (${min.dist.toFixed(2)})`
+    });
+    drawBox.draw(canvas);
+
+    const txChar = await UARTService.getCharacteristic(RX_UUID);
+
+    if (min && min.dist < 0.6) {
+      await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
+      statusEl.textContent = `✅ 成功辨識為 ${min.label}.jpg，門已解鎖`;
+    } else {
+      await txChar.writeValue(new TextEncoder().encode("FAIL"));
+      statusEl.textContent = "❌ 臉部不符，拒絕解鎖";
+    }
+
+  } catch (err) {
+    console.error("❌ 辨識過程錯誤：", err);
+    statusEl.textContent = "❌ 辨識失敗，請重試";
+  }
+}
 
     connectBtn.onclick = connectBLE;
     identifyBtn.onclick = identifyFace;
