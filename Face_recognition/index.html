@@ -15,9 +15,11 @@
       flex-direction: column;
       align-items: center;
     }
+
     h2 {
       margin-bottom: 20px;
     }
+
     .btn-container {
       display: flex;
       gap: 10px;
@@ -25,6 +27,7 @@
       flex-wrap: wrap;
       justify-content: center;
     }
+
     button {
       padding: 12px 20px;
       font-size: 16px;
@@ -34,6 +37,7 @@
       color: white;
       cursor: pointer;
     }
+
     #videoContainer {
       position: relative;
       width: 100%;
@@ -41,6 +45,7 @@
       aspect-ratio: 4/3;
       overflow: hidden;
     }
+
     video, canvas {
       width: 100%;
       height: 100%;
@@ -49,6 +54,7 @@
       top: 0;
       left: 0;
     }
+
     #status {
       margin-top: 10px;
       color: gray;
@@ -75,6 +81,8 @@
     const video = document.getElementById("video");
     const canvas = document.getElementById("overlay");
     const ctx = canvas.getContext("2d");
+    const connectBtn = document.getElementById("connectBtn");
+    const identifyBtn = document.getElementById("identifyBtn");
     const statusEl = document.getElementById("status");
 
     let UARTService;
@@ -84,12 +92,19 @@
     const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 
     async function loadModels() {
-      statusEl.textContent = "📦 正在載入模型...";
-      await faceapi.nets.tinyFaceDetector.loadFromUri('./models');
-      await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
-      await faceapi.nets.faceRecognitionNet.loadFromUri('./models');
-      await loadReferenceFaces();
-      statusEl.textContent = "✅ 模型與人臉資料載入完成，請連接 ESP32。";
+      try {
+        statusEl.textContent = "📦 正在載入模型...";
+        await faceapi.nets.tinyFaceDetector.loadFromUri('./models');
+        await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
+        await faceapi.nets.faceRecognitionNet.loadFromUri('./models');
+
+        console.log("✅ 模型載入完成！");
+        await loadReferenceFaces();
+        statusEl.textContent = "✅ 模型與人臉資料載入完成，請連接 ESP32。";
+      } catch (err) {
+        console.error("❌ 模型載入失敗：", err);
+        statusEl.textContent = "❌ 模型載入失敗，請檢查 ./models 與 faces 資料夾";
+      }
     }
 
     async function loadReferenceFaces() {
@@ -100,21 +115,32 @@
           .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
           .withFaceLandmarks()
           .withFaceDescriptor();
+
         if (detection) {
           knownDescriptors.push({ label, descriptor: detection.descriptor });
+          console.log(`✅ 載入 ${label}.jpg 成功`);
+        } else {
+          console.warn(`⚠️ 無法從 ${label}.jpg 偵測到人臉`);
         }
       }
     }
 
     async function startVideo() {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-      video.srcObject = stream;
-      video.onloadedmetadata = () => {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        video.play();
-        statusEl.textContent = "📷 攝影機已啟動，請按下辨識";
-      };
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+        video.srcObject = stream;
+
+        video.onloadedmetadata = () => {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          video.play();
+          statusEl.textContent = "📷 攝影機已啟動，請按下辨識";
+        };
+      } catch (err) {
+        alert("❌ 攝影機無法啟動，請檢查權限！");
+        statusEl.textContent = "❌ 攝影機啟動失敗";
+        console.error(err);
+      }
     }
 
     async function connectBLE() {
@@ -125,62 +151,75 @@
         });
         const server = await device.gatt.connect();
         UARTService = await server.getPrimaryService(UART_SERVICE);
-        statusEl.textContent = "✅ ESP32 已連線";
-        document.getElementById("identifyBtn").disabled = false;
+        console.log("✅ 已連線 ESP32");
+
+        identifyBtn.disabled = false;
         await startVideo();
       } catch (err) {
+        alert("❌ 藍牙連接失敗：" + err);
         statusEl.textContent = "❌ 藍牙連線失敗";
       }
     }
 
     async function identifyFace() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      const result = await faceapi
-        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-        .withFaceLandmarks()
-        .withFaceDescriptor();
-
-      if (!result) {
-        statusEl.textContent = "😕 沒有偵測到人臉，請靠近一點...";
-        return;
-      }
-
-      const resized = faceapi.resizeResults(result, {
-        width: canvas.width,
-        height: canvas.height
-      });
-
-      // 🎯 繪製 68 點特徵
-      ctx.fillStyle = "magenta";
-      resized.landmarks.positions.forEach(pt => {
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y, 1.4, 0, 2 * Math.PI);
-        ctx.fill();
-      });
-
-      // 🎯 比對最小距離
-      const descriptor = result.descriptor;
-      const min = knownDescriptors
-        .map(item => ({
-          label: item.label,
-          dist: faceapi.euclideanDistance(descriptor, item.descriptor)
-        }))
-        .sort((a, b) => a.dist - b.dist)[0];
-
-      // 🎯 正方形對比框
-      const box = resized.detection.box;
-      const size = Math.min(box.width, box.height);
-      const squareBox = new faceapi.Rect(box.x, box.y, size, size);
-      const boxColor = (min && min.dist < 0.6) ? "green" : "red";
-      const drawBox = new faceapi.draw.DrawBox(squareBox, {
-        label: `${min.label}.jpg (${min.dist.toFixed(2)})`,
-        boxColor: boxColor
-      });
-      drawBox.draw(canvas);
-
-      // 🎯 傳送至 ESP32
       try {
+        const result = await faceapi
+          .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks()
+          .withFaceDescriptor();
+
+        if (!result) {
+          statusEl.textContent = "😕 沒有偵測到人臉，請靠近一點...";
+          return;
+        }
+
+        const resized = faceapi.resizeResults(result, {
+          width: canvas.width,
+          height: canvas.height
+        });
+
+        // 畫 68 點 + 線
+        const landmarks = resized.landmarks.positions;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = "red";
+        ctx.beginPath();
+        landmarks.forEach((pt, i) => {
+          if (i === 0) {
+            ctx.moveTo(pt.x, pt.y);
+          } else {
+            ctx.lineTo(pt.x, pt.y);
+          }
+        });
+        ctx.stroke();
+
+        // 比對臉部
+        const descriptor = result.descriptor;
+        const min = knownDescriptors
+          .map(item => ({
+            label: item.label,
+            dist: faceapi.euclideanDistance(descriptor, item.descriptor)
+          }))
+          .sort((a, b) => a.dist - b.dist)[0];
+
+        // 調整框框
+        const originalBox = resized.detection.box;
+        const shrink = 0.3;
+        const adjustedBox = new faceapi.Box(
+          originalBox.x + originalBox.width * shrink,
+          originalBox.y,
+          originalBox.width * (1 - 2 * shrink),
+          originalBox.height
+        );
+
+        const boxColor = (min && min.dist < 0.6) ? "green" : "red";
+        const drawBox = new faceapi.draw.DrawBox(adjustedBox, {
+          label: `${min.label}.jpg (${min.dist.toFixed(2)})`,
+          boxColor: boxColor
+        });
+        drawBox.draw(canvas);
+
+        // 藍牙傳送
         const txChar = await UARTService.getCharacteristic(RX_UUID);
         if (min && min.dist < 0.6) {
           await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
@@ -190,13 +229,13 @@
           statusEl.textContent = "❌ 臉部不符，拒絕解鎖";
         }
       } catch (err) {
-        statusEl.textContent = "❌ 傳送錯誤，請重新連線";
+        console.error("❌ 辨識過程錯誤：", err);
+        statusEl.textContent = "❌ 辨識失敗，請重試";
       }
     }
 
-    document.getElementById("connectBtn").onclick = connectBLE;
-    document.getElementById("identifyBtn").onclick = identifyFace;
-
+    connectBtn.onclick = connectBLE;
+    identifyBtn.onclick = identifyFace;
     loadModels();
   </script>
 </body>
