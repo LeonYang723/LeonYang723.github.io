@@ -94,9 +94,10 @@
     async function loadModels() {
       try {
         statusEl.textContent = "📦 正在載入模型...";
-        await faceapi.nets.tinyFaceDetector.loadFromUri('./models');
-        await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
-        await faceapi.nets.faceRecognitionNet.loadFromUri('./models');
+        await faceapi.nets.tinyFaceDetector.loadFromUri('Face_recognition/models');
+        await faceapi.nets.faceLandmark68Net.loadFromUri('Face_recognition/models');
+        await faceapi.nets.faceRecognitionNet.loadFromUri('Face_recognition/models');
+
         console.log("✅ 模型載入完成！");
         await loadReferenceFaces();
         statusEl.textContent = "✅ 模型與人臉資料載入完成，請連接 ESP32。";
@@ -109,7 +110,7 @@
     async function loadReferenceFaces() {
       const labels = ["1", "2", "3"];
       for (let label of labels) {
-        const img = await faceapi.fetchImage(`./faces/${label}.png`);
+        const img = await faceapi.fetchImage(`./faces/${label}.jpg`);
         const detection = await faceapi
           .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
           .withFaceLandmarks()
