@@ -215,14 +215,15 @@ try {
     await txChar.writeValue(new TextEncoder().encode("FAIL"));
     statusEl.textContent = "❌ 臉部不符，拒絕解鎖";
   }
-} catch (err) {
-  console.error("❌ 傳送失敗：", err);
-  statusEl.textContent = "❌ 藍牙錯誤，請重新連線";
-}
+}     } catch (err) {
+      console.error("❌ 傳送失敗：", err);
+      statusEl.textContent = "❌ 藍牙錯誤，請重新連線";
+    }
+  } // 👈 這是 identifyFace() 的結尾大括號
 
-    connectBtn.onclick = connectBLE;
-    identifyBtn.onclick = identifyFace;
-    loadModels();
+  connectBtn.onclick = connectBLE;
+  identifyBtn.onclick = identifyFace;
+  loadModels();
   </script>
 </body>
 </html>
