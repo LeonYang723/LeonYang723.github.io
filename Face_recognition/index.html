@@ -174,11 +174,6 @@
           return;
         }
 
-        const resized = faceapi.resizeResults(result, {
-          width: canvas.width,
-          height: canvas.height
-        });
-
         const descriptor = result.descriptor;
         const min = knownDescriptors
           .map(item => ({
@@ -187,17 +182,13 @@
           }))
           .sort((a, b) => a.dist - b.dist)[0];
 
+        const resized = faceapi.resizeResults(result, {
+          width: canvas.width,
+          height: canvas.height
+        });
+
         const boxColor = (min && min.dist < 0.6) ? "green" : "red";
-
-        const box = resized.detection.box;
-        const shrink = 0;
-        const newWidth = box.width * (1 - shrink);
-        const newHeight = box.height * (1 - shrink);
-        const newX = box.x + (box.width - newWidth) / 2;
-        const newY = box.y + (box.height - newHeight) / 2;
-        const shrinkedBox = new faceapi.Box(newX, newY, newWidth, newHeight);
-
-        const drawBox = new faceapi.draw.DrawBox(shrinkedBox, {
+        const drawBox = new faceapi.draw.DrawBox(resized.detection.box, {
           label: `${min.label}.jpg (${min.dist.toFixed(2)})`,
           boxColor: boxColor
         });
@@ -205,7 +196,7 @@
 
         try {
           const txChar = await UARTService.getCharacteristic(RX_UUID);
-          if (min && min.dist < 0.5) {
+          if (min && min.dist < 0.6) {
             await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
             statusEl.textContent = `✅ 成功辨識為 ${min.label}.jpg，門已解鎖`;
           } else {
@@ -217,7 +208,7 @@
           statusEl.textContent = "❌ 藍牙錯誤，請重新連線";
         }
       } catch (err) {
-        console.error("❌ 辨識過程錯誤：", err);
+        console.error("❌ 辨識失敗：", err);
         statusEl.textContent = "❌ 辨識失敗，請重試";
       }
     }
