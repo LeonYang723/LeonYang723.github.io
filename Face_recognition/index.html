@@ -215,7 +215,7 @@ try {
     await txChar.writeValue(new TextEncoder().encode("FAIL"));
     statusEl.textContent = "❌ 臉部不符，拒絕解鎖";
   }
-}     } catch (err) {
+     } catch (err) {
       console.error("❌ 傳送失敗：", err);
       statusEl.textContent = "❌ 藍牙錯誤，請重新連線";
     }
