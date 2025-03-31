@@ -142,8 +142,13 @@
     async function identifyFace() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       try {
+        const options = new faceapi.TinyFaceDetectorOptions({
+          inputSize: 320,
+          scoreThreshold: 0.5
+        });
+
         const result = await faceapi
-          .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+          .detectSingleFace(video, options)
           .withFaceLandmarks()
           .withFaceDescriptor();
 
