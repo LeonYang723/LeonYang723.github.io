@@ -12,11 +12,9 @@
       padding: 20px;
       text-align: center;
     }
-
     .btn-container {
       margin-bottom: 20px;
     }
-
     button {
       padding: 10px 20px;
       font-size: 16px;
@@ -27,7 +25,6 @@
       cursor: pointer;
       margin: 5px;
     }
-
     #videoContainer {
       position: relative;
       width: 100%;
@@ -35,29 +32,39 @@
       margin: 0 auto;
       background: black;
     }
-
     video, canvas {
       width: 100%;
       border-radius: 10px;
     }
-
     canvas#overlay {
       position: absolute;
       top: 0;
       left: 0;
     }
-
-    #chartContainer {
+    #chartContainer, #tableContainer {
       margin-top: 40px;
       max-width: 360px;
       margin-left: auto;
       margin-right: auto;
     }
-
     #status {
       margin-top: 10px;
       font-size: 14px;
       color: gray;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 6px;
+    }
+    th {
+      background: #007bff;
+      color: white;
     }
   </style>
 </head>
@@ -78,6 +85,20 @@
     <canvas id="scoreChart"></canvas>
   </div>
 
+  <div id="tableContainer">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>辨識對象</th>
+          <th>相似度</th>
+          <th>結果</th>
+        </tr>
+      </thead>
+      <tbody id="resultTableBody"></tbody>
+    </table>
+  </div>
+
   <div id="status">📦 載入中...</div>
 
   <script>
@@ -85,6 +106,7 @@
     const canvas = document.getElementById("overlay");
     const ctx = canvas.getContext("2d");
     const statusEl = document.getElementById("status");
+    const resultTableBody = document.getElementById("resultTableBody");
     const connectBtn = document.getElementById("connectBtn");
     const identifyBtn = document.getElementById("identifyBtn");
 
@@ -114,10 +136,7 @@
         responsive: true,
         scales: {
           x: {
-            title: {
-              display: true,
-              text: 'Index'
-            }
+            title: { display: true, text: 'Index' }
           },
           y: {
             beginAtZero: true,
@@ -204,7 +223,6 @@
       const min = results.sort((a, b) => a.dist - b.dist)[0];
       const isMatched = min && min.dist < MATCH_THRESHOLD;
 
-      // 🟩 對比框框顏色根據結果設定
       const drawBox = new faceapi.draw.DrawBox({
         x: box.x + box.width * (1 - shrinkRatio) / 2,
         y: box.y + offsetY + box.height * (1 - shrinkRatio) / 2,
@@ -216,12 +234,22 @@
       });
       drawBox.draw(canvas);
 
-      // 📈 更新圖表
-      chart.data.labels.push(indexCounter++);
+      // ✅ 更新圖表
+      chart.data.labels.push(indexCounter);
       chart.data.datasets[0].data.push(min.dist);
       chart.update();
 
-      // 📡 傳送 BLE 指令
+      // ✅ 更新表格
+      const newRow = document.createElement("tr");
+      newRow.innerHTML = `
+        <td>${indexCounter}</td>
+        <td>${min.label}.jpg</td>
+        <td>${min.dist.toFixed(4)}</td>
+        <td style="color:${isMatched ? 'green' : 'red'}">${isMatched ? '成功' : '失敗'}</td>
+      `;
+      resultTableBody.appendChild(newRow);
+      indexCounter++;
+
       const txChar = await UARTService.getCharacteristic(RX_UUID);
       if (isMatched) {
         await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
