@@ -48,7 +48,7 @@
     }
 
     #chartContainer {
-      margin-top: 20px;
+      margin-top: 40px; /* ✅ 向下推 */
       max-width: 360px;
       margin-left: auto;
       margin-right: auto;
@@ -90,6 +90,7 @@
 
     let UARTService;
     let knownDescriptors = [];
+    let indexCounter = 1;
 
     const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
     const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
@@ -111,7 +112,16 @@
       options: {
         responsive: true,
         scales: {
-          y: { beginAtZero: true, max: 1 }
+          x: {
+            title: {
+              display: true,
+              text: 'Index'
+            }
+          },
+          y: {
+            beginAtZero: true,
+            max: 1
+          }
         }
       }
     });
@@ -180,19 +190,16 @@
         height: canvas.height
       });
 
-      // 👉 手動畫框往上縮小
       const box = resized.detection.box;
       const shrinkRatio = 0.8;
       const offsetY = -box.height * 0.1;
+
       const drawBox = new faceapi.draw.DrawBox({
         x: box.x + box.width * (1 - shrinkRatio) / 2,
         y: box.y + offsetY + box.height * (1 - shrinkRatio) / 2,
         width: box.width * shrinkRatio,
         height: box.height * shrinkRatio
-      }, {
-        label: "",
-        boxColor: "green"
-      });
+      }, { label: "", boxColor: "green" });
 
       const descriptor = result.descriptor;
       const results = knownDescriptors.map(item => ({
@@ -205,12 +212,11 @@
       drawBox.options.label = `${min.label}.jpg (${min.dist.toFixed(2)})`;
       drawBox.draw(canvas);
 
-      // Chart 更新
-      chart.data.labels.push(min.label);
+      // ✅ 更新圖表（X 軸為 index 數字）
+      chart.data.labels.push(indexCounter++);
       chart.data.datasets[0].data.push(min.dist);
       chart.update();
 
-      // 傳送藍芽訊號
       const txChar = await UARTService.getCharacteristic(RX_UUID);
       if (min && min.dist < 0.6) {
         await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
