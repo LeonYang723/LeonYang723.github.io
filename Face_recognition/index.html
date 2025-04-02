@@ -16,11 +16,9 @@
       flex-direction: column;
       align-items: center;
     }
-
     h2 {
       margin-bottom: 20px;
     }
-
     .btn-container {
       display: flex;
       gap: 10px;
@@ -28,7 +26,6 @@
       flex-wrap: wrap;
       justify-content: center;
     }
-
     button {
       padding: 12px 20px;
       font-size: 16px;
@@ -38,7 +35,6 @@
       color: white;
       cursor: pointer;
     }
-
     #videoContainer {
       position: relative;
       width: 100%;
@@ -46,7 +42,6 @@
       aspect-ratio: 4/3;
       overflow: hidden;
     }
-
     video, canvas {
       width: 100%;
       height: 100%;
@@ -55,22 +50,20 @@
       top: 0;
       left: 0;
     }
-
     #status {
-      margin-top: 10px;
+      margin-top: 12px;
       color: gray;
       font-size: 14px;
+      text-align: center;
     }
-
-    #chartWrapper {
+    #chartContainer {
       width: 100%;
       max-width: 640px;
       margin-top: 20px;
-      display: none;
       background: white;
-      padding: 10px;
       border-radius: 12px;
-      box-shadow: 0 0 5px rgba(0,0,0,0.2);
+      padding: 10px;
+      display: none;
     }
   </style>
 </head>
@@ -89,8 +82,8 @@
 
   <div id="status">請先連接 ESP32 並等待鏡頭啟動...</div>
 
-  <div id="chartWrapper">
-    <canvas id="chartCanvas"></canvas>
+  <div id="chartContainer">
+    <canvas id="distanceChart"></canvas>
   </div>
 
   <script>
@@ -100,12 +93,11 @@
     const connectBtn = document.getElementById("connectBtn");
     const identifyBtn = document.getElementById("identifyBtn");
     const statusEl = document.getElementById("status");
-    const chartWrapper = document.getElementById("chartWrapper");
-    const chartCanvas = document.getElementById("chartCanvas");
+    const chartContainer = document.getElementById("chartContainer");
+    let chart;
 
     let UARTService;
     let knownDescriptors = [];
-    let similarityChart = null;
 
     const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
     const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
@@ -169,6 +161,7 @@
         const server = await device.gatt.connect();
         UARTService = await server.getPrimaryService(UART_SERVICE);
         console.log("✅ 已連線 ESP32");
+
         identifyBtn.disabled = false;
         await startVideo();
       } catch (err) {
@@ -197,10 +190,7 @@
 
         const descriptor = result.descriptor;
         const min = knownDescriptors
-          .map(item => ({
-            label: item.label,
-            dist: faceapi.euclideanDistance(descriptor, item.descriptor)
-          }))
+          .map(item => ({ label: item.label, dist: faceapi.euclideanDistance(descriptor, item.descriptor) }))
           .sort((a, b) => a.dist - b.dist)[0];
 
         const boxColor = (min && min.dist < 0.6) ? "green" : "red";
@@ -210,55 +200,54 @@
         });
         drawBox.draw(canvas);
 
-        chartWrapper.style.display = "block";
-        updateChart(min.dist);
+        if (!chart) initChart();
+        addChartData(min.dist);
 
-        try {
-          const txChar = await UARTService.getCharacteristic(RX_UUID);
-          if (min && min.dist < 0.6) {
-            await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
-            statusEl.textContent = `✅ 成功辨識為 ${min.label}.jpg，門已解鎖`;
-          } else {
-            await txChar.writeValue(new TextEncoder().encode("FAIL"));
-            statusEl.textContent = "❌ 臉部不符，拒絕解鎖";
-          }
-        } catch (err) {
-          console.error("❌ 傳送失敗：", err);
-          statusEl.textContent = "❌ 藍牙錯誤，請重新連線";
+        const txChar = await UARTService.getCharacteristic(RX_UUID);
+        if (min && min.dist < 0.6) {
+          await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
+          statusEl.textContent = `✅ 成功辨識為 ${min.label}.jpg，門已解鎖`;
+        } else {
+          await txChar.writeValue(new TextEncoder().encode("FAIL"));
+          statusEl.textContent = "❌ 臉部不符，拒絕解鎖";
         }
 
+        chartContainer.style.display = "block";
+
       } catch (err) {
-        console.error("❌ 辨識錯誤：", err);
+        console.error("❌ 辨識過程錯誤：", err);
         statusEl.textContent = "❌ 辨識失敗，請重試";
       }
     }
 
-    function updateChart(value) {
-      if (!similarityChart) {
-        similarityChart = new Chart(chartCanvas, {
-          type: "line",
-          data: {
-            labels: [],
-            datasets: [{
-              label: "Similarity Distance",
-              data: [],
-              borderWidth: 2,
-              borderColor: "blue",
-              fill: false
-            }]
-          },
-          options: {
-            responsive: true,
-            scales: {
-              y: { min: 0, max: 1, title: { display: true, text: "Distance" } },
-              x: { title: { display: true, text: "Index" } }
+    function initChart() {
+      const ctx = document.getElementById("distanceChart").getContext("2d");
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [{
+            label: 'Similarity Distance',
+            borderColor: 'blue',
+            data: []
+          }]
+        },
+        options: {
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 1
             }
           }
-        });
-      }
-      similarityChart.data.labels.push(similarityChart.data.labels.length + 1);
-      similarityChart.data.datasets[0].data.push(value);
-      similarityChart.update();
+        }
+      });
+    }
+
+    function addChartData(dist) {
+      const now = new Date().toLocaleTimeString();
+      chart.data.labels.push(now);
+      chart.data.datasets[0].data.push(dist);
+      chart.update();
     }
 
     connectBtn.onclick = connectBLE;
