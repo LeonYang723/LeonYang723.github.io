@@ -9,19 +9,21 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      background-color: #f0f0f0;
+      background-color: #f4f4f4;
+      margin: 0;
       padding: 20px;
-      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
 
     h2 {
-      margin-bottom: 20px;
+      margin: 20px 0;
     }
 
     .btn-container {
       display: flex;
       gap: 10px;
-      justify-content: center;
       margin-bottom: 20px;
     }
 
@@ -40,7 +42,6 @@
       width: 100%;
       max-width: 640px;
       aspect-ratio: 4 / 3;
-      margin: 0 auto;
     }
 
     video, canvas {
@@ -55,11 +56,12 @@
     #chartContainer {
       width: 100%;
       max-width: 640px;
-      margin: 20px auto;
+      margin: 30px auto 10px;
     }
 
     #status {
       margin-top: 20px;
+      font-size: 16px;
       color: #555;
     }
   </style>
@@ -77,6 +79,7 @@
     <canvas id="overlay"></canvas>
   </div>
 
+  <!-- 圖表放在鏡頭區塊下方 -->
   <div id="chartContainer">
     <canvas id="chart"></canvas>
   </div>
@@ -87,10 +90,10 @@
     const video = document.getElementById("video");
     const canvas = document.getElementById("overlay");
     const ctx = canvas.getContext("2d");
+    const chartEl = document.getElementById("chart");
     const connectBtn = document.getElementById("connectBtn");
     const identifyBtn = document.getElementById("identifyBtn");
     const statusEl = document.getElementById("status");
-    const chartEl = document.getElementById("chart");
 
     let UARTService;
     let knownDescriptors = [];
@@ -111,6 +114,8 @@
         }]
       },
       options: {
+        responsive: true,
+        maintainAspectRatio: false,
         scales: {
           y: {
             min: 0,
