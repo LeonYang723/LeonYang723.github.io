@@ -218,7 +218,7 @@
       chart.update();
 
       const txChar = await UARTService.getCharacteristic(RX_UUID);
-      if (min && min.dist < 0.6) {
+      if (min && min.dist < 0.4) {
         await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
         statusEl.textContent = `✅ 成功辨識為 ${min.label}.jpg`;
       } else {
