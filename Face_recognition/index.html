@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
   <title>ESP32 臉部辨識門鎖</title>
   <script src="./face-api.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -34,6 +33,7 @@
       width: 100%;
       max-width: 360px;
       margin: 0 auto;
+      background: black;
     }
 
     video {
@@ -85,35 +85,33 @@
     const canvas = document.getElementById("overlay");
     const ctx = canvas.getContext("2d");
     const statusEl = document.getElementById("status");
+
     const connectBtn = document.getElementById("connectBtn");
     const identifyBtn = document.getElementById("identifyBtn");
 
     let UARTService;
     let knownDescriptors = [];
-    let identifyCount = 0;
 
     const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
     const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 
-    // 折線圖設置
-    const scoreChart = new Chart(document.getElementById("scoreChart").getContext("2d"), {
+    const chart = new Chart(document.getElementById("scoreChart").getContext("2d"), {
       type: "line",
       data: {
         labels: [],
         datasets: [{
           label: "Similarity Score",
           data: [],
-          fill: false,
-          borderColor: "blue",
           backgroundColor: "blue",
-          tension: 0.3,
-          pointRadius: 5
+          borderColor: "blue",
+          borderWidth: 2,
+          pointRadius: 5,
+          fill: false
         }]
       },
       options: {
         scales: {
-          y: { beginAtZero: true, max: 1 },
-          x: { title: { display: true, text: "辨識次數" } }
+          y: { beginAtZero: true, max: 1 }
         }
       }
     });
@@ -124,7 +122,7 @@
       await faceapi.nets.faceLandmark68Net.loadFromUri("./models");
       await faceapi.nets.faceRecognitionNet.loadFromUri("./models");
       await loadReferenceFaces();
-      statusEl.textContent = "✅ 模型與人臉資料載入完成，請連接 ESP32";
+      statusEl.textContent = "✅ 模型載入完成！";
     }
 
     async function loadReferenceFaces() {
@@ -132,10 +130,9 @@
       for (let label of labels) {
         const img = await faceapi.fetchImage(`./faces/${label}.jpg`);
         const detection = await faceapi
-          .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
+          .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.5 }))
           .withFaceLandmarks()
           .withFaceDescriptor();
-
         if (detection) {
           knownDescriptors.push({ label, descriptor: detection.descriptor });
         }
@@ -166,9 +163,8 @@
 
     async function identifyFace() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-
       const result = await faceapi
-        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.5 }))
         .withFaceLandmarks()
         .withFaceDescriptor();
 
@@ -177,7 +173,6 @@
         return;
       }
 
-      // 縮放為 video 寬高大小
       const resized = faceapi.resizeResults(result, {
         width: canvas.width,
         height: canvas.height
@@ -191,24 +186,28 @@
 
       const min = results.sort((a, b) => a.dist - b.dist)[0];
 
-      // 畫框
+      // 顯示辨識框
       const drawBox = new faceapi.draw.DrawBox(resized.detection.box, {
         label: `${min.label}.jpg (${min.dist.toFixed(2)})`,
         boxColor: min.dist < 0.6 ? "green" : "red"
       });
       drawBox.draw(canvas);
 
-      // 累計並畫圖表
-      identifyCount++;
-      scoreChart.data.labels.push(identifyCount.toString());
-      scoreChart.data.datasets[0].data.push(min.dist);
-      scoreChart.update();
+      // 畫圖表資料點
+      const timeLabel = (new Date()).toLocaleTimeString();
+      chart.data.labels.push(timeLabel);
+      chart.data.datasets[0].data.push(min.dist);
+      if (chart.data.labels.length > 10) {
+        chart.data.labels.shift();
+        chart.data.datasets[0].data.shift();
+      }
+      chart.update();
 
-      // 傳送 BLE 指令
+      // 傳送藍牙
       const txChar = await UARTService.getCharacteristic(RX_UUID);
-      if (min.dist < 0.6) {
+      if (min && min.dist < 0.6) {
         await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
-        statusEl.textContent = `✅ 成功辨識為 ${min.label}.jpg，門已解鎖`;
+        statusEl.textContent = `✅ 成功辨識為 ${min.label}.jpg`;
       } else {
         await txChar.writeValue(new TextEncoder().encode("FAIL"));
         statusEl.textContent = "❌ 拒絕開鎖";
