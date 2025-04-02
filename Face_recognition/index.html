@@ -102,21 +102,22 @@
       }
     }
 
-    async function sendDescriptorInChunks(descriptor) {
-      const txChar = await UARTService.getCharacteristic(RX_UUID);
-      const CHUNK_SIZE = 32;
-      const totalChunks = Math.ceil(descriptor.length / CHUNK_SIZE);
+   async function sendDescriptorInChunks(descriptor) {
+  const txChar = await UARTService.getCharacteristic(RX_UUID);
+  const CHUNK_SIZE = 5; // 每片段 5 維
+  const totalChunks = Math.ceil(descriptor.length / CHUNK_SIZE);
 
-      for (let i = 0; i < descriptor.length; i += CHUNK_SIZE) {
-        const chunk = descriptor.slice(i, i + CHUNK_SIZE);
-        const payload = chunk.map(n => n.toFixed(6)).join(",");
-        const header = `CHUNK:${i / CHUNK_SIZE + 1}/${totalChunks}|`;
-        await txChar.writeValue(new TextEncoder().encode(header + payload));
-        await new Promise(resolve => setTimeout(resolve, 100)); // 避免過快
-      }
+  for (let i = 0; i < descriptor.length; i += CHUNK_SIZE) {
+    const chunk = descriptor.slice(i, i + CHUNK_SIZE);
+    const payload = chunk.map(n => n.toFixed(6)).join(",");  // 僅用逗號，不加其他符號
+    const header = `CHUNK:${i / CHUNK_SIZE + 1}/${totalChunks}|`;
+    await txChar.writeValue(new TextEncoder().encode(header + payload));
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
 
-      statusEl.textContent = "✅ 全部向量傳送完成";
-    }
+  statusEl.textContent = "✅ 128 維向量已分段傳送完畢";
+}
+
 
     async function detectAndSend() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
