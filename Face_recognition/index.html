@@ -48,7 +48,7 @@
     }
 
     #chartContainer {
-      margin-top: 40px; /* ✅ 向下推 */
+      margin-top: 40px;
       max-width: 360px;
       margin-left: auto;
       margin-right: auto;
@@ -91,6 +91,7 @@
     let UARTService;
     let knownDescriptors = [];
     let indexCounter = 1;
+    const MATCH_THRESHOLD = 0.4;
 
     const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
     const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
@@ -194,13 +195,6 @@
       const shrinkRatio = 0.8;
       const offsetY = -box.height * 0.1;
 
-      const drawBox = new faceapi.draw.DrawBox({
-        x: box.x + box.width * (1 - shrinkRatio) / 2,
-        y: box.y + offsetY + box.height * (1 - shrinkRatio) / 2,
-        width: box.width * shrinkRatio,
-        height: box.height * shrinkRatio
-      }, { label: "", boxColor: "green" });
-
       const descriptor = result.descriptor;
       const results = knownDescriptors.map(item => ({
         label: item.label,
@@ -208,17 +202,28 @@
       }));
 
       const min = results.sort((a, b) => a.dist - b.dist)[0];
+      const isMatched = min && min.dist < MATCH_THRESHOLD;
 
-      drawBox.options.label = `${min.label}.jpg (${min.dist.toFixed(2)})`;
+      // 🟩 對比框框顏色根據結果設定
+      const drawBox = new faceapi.draw.DrawBox({
+        x: box.x + box.width * (1 - shrinkRatio) / 2,
+        y: box.y + offsetY + box.height * (1 - shrinkRatio) / 2,
+        width: box.width * shrinkRatio,
+        height: box.height * shrinkRatio
+      }, {
+        label: `${min.label}.jpg (${min.dist.toFixed(2)})`,
+        boxColor: isMatched ? "green" : "red"
+      });
       drawBox.draw(canvas);
 
-      // ✅ 更新圖表（X 軸為 index 數字）
+      // 📈 更新圖表
       chart.data.labels.push(indexCounter++);
       chart.data.datasets[0].data.push(min.dist);
       chart.update();
 
+      // 📡 傳送 BLE 指令
       const txChar = await UARTService.getCharacteristic(RX_UUID);
-      if (min && min.dist < 0.4) {
+      if (isMatched) {
         await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
         statusEl.textContent = `✅ 成功辨識為 ${min.label}.jpg`;
       } else {
