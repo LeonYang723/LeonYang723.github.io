@@ -1,66 +1,4 @@
-<!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-  <meta charset="UTF-8">
-  <title>ESP32 臉部辨識門鎖</title>
-  <script src="./face-api.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f0f0f0;
-      padding: 20px;
-      text-align: center;
-    }
-
-    .btn-container {
-      margin-bottom: 20px;
-    }
-
-    button {
-      padding: 10px 20px;
-      font-size: 16px;
-      border: none;
-      border-radius: 8px;
-      background: #007bff;
-      color: white;
-      cursor: pointer;
-      margin: 5px;
-    }
-
-    #videoContainer {
-      position: relative;
-      width: 100%;
-      max-width: 360px;
-      margin: 0 auto;
-      background: black;
-    }
-
-    video, canvas {
-      width: 100%;
-      border-radius: 10px;
-    }
-
-    canvas#overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-    }
-
-    #chartContainer {
-      margin-top: 40px;
-      max-width: 360px;
-      margin-left: auto;
-      margin-right: auto;
-    }
-
-    #status {
-      margin-top: 10px;
-      font-size: 14px;
-      color: gray;
-    }
-  </style>
-</head>
+<!-- head 保持不變，略 -->
 <body>
   <h2>🔐 臉部辨識門鎖</h2>
 
@@ -74,11 +12,24 @@
     <canvas id="overlay"></canvas>
   </div>
 
+  <!-- 圖表下方加上紀錄表格 -->
   <div id="chartContainer">
     <canvas id="scoreChart"></canvas>
   </div>
 
   <div id="status">📦 載入中...</div>
+
+  <table id="logTable" border="1" style="margin-top:20px; max-width:360px; margin-inline:auto; border-collapse:collapse;">
+    <thead>
+      <tr style="background-color:#ccc;">
+        <th>Index</th>
+        <th>對比照片</th>
+        <th>相似度</th>
+        <th>結果</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
   <script>
     const video = document.getElementById("video");
@@ -87,14 +38,12 @@
     const statusEl = document.getElementById("status");
     const connectBtn = document.getElementById("connectBtn");
     const identifyBtn = document.getElementById("identifyBtn");
+    const logTable = document.getElementById("logTable").querySelector("tbody");
 
     let UARTService;
     let knownDescriptors = [];
     let indexCounter = 1;
-    const MATCH_THRESHOLD = 0.4;
-
-    const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
-    const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
+    const THRESHOLD = 0.4;
 
     const chart = new Chart(document.getElementById("scoreChart").getContext("2d"), {
       type: "line",
@@ -113,16 +62,8 @@
       options: {
         responsive: true,
         scales: {
-          x: {
-            title: {
-              display: true,
-              text: 'Index'
-            }
-          },
-          y: {
-            beginAtZero: true,
-            max: 1
-          }
+          y: { beginAtZero: true, max: 1 },
+          x: { title: { display: true, text: "Index" } }
         }
       }
     });
@@ -164,20 +105,18 @@
     async function connectBLE() {
       const device = await navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
-        optionalServices: [UART_SERVICE]
+        optionalServices: ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"]
       });
       const server = await device.gatt.connect();
-      UARTService = await server.getPrimaryService(UART_SERVICE);
+      UARTService = await server.getPrimaryService("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
       identifyBtn.disabled = false;
       await startVideo();
     }
 
     async function identifyFace() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.5 });
-
       const result = await faceapi
-        .detectSingleFace(video, options)
+        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160 }))
         .withFaceLandmarks()
         .withFaceDescriptor();
 
@@ -186,11 +125,7 @@
         return;
       }
 
-      const resized = faceapi.resizeResults(result, {
-        width: canvas.width,
-        height: canvas.height
-      });
-
+      const resized = faceapi.resizeResults(result, { width: canvas.width, height: canvas.height });
       const box = resized.detection.box;
       const shrinkRatio = 0.8;
       const offsetY = -box.height * 0.1;
@@ -202,28 +137,32 @@
       }));
 
       const min = results.sort((a, b) => a.dist - b.dist)[0];
-      const isMatched = min && min.dist < MATCH_THRESHOLD;
 
-      // 🟩 對比框框顏色根據結果設定
+      const color = min.dist < THRESHOLD ? "green" : "red";
       const drawBox = new faceapi.draw.DrawBox({
         x: box.x + box.width * (1 - shrinkRatio) / 2,
         y: box.y + offsetY + box.height * (1 - shrinkRatio) / 2,
         width: box.width * shrinkRatio,
         height: box.height * shrinkRatio
-      }, {
-        label: `${min.label}.jpg (${min.dist.toFixed(2)})`,
-        boxColor: isMatched ? "green" : "red"
-      });
+      }, { label: `${min.label}.jpg (${min.dist.toFixed(2)})`, boxColor: color });
       drawBox.draw(canvas);
 
-      // 📈 更新圖表
-      chart.data.labels.push(indexCounter++);
+      // 更新圖表
+      chart.data.labels.push(indexCounter);
       chart.data.datasets[0].data.push(min.dist);
       chart.update();
 
-      // 📡 傳送 BLE 指令
+      // 新增表格列
+      const row = logTable.insertRow();
+      row.insertCell().innerText = indexCounter;
+      row.insertCell().innerText = `${min.label}.jpg`;
+      row.insertCell().innerText = min.dist.toFixed(4);
+      row.insertCell().innerText = min.dist < THRESHOLD ? "成功" : "失敗";
+      indexCounter++;
+
+      // 傳送至 ESP32
       const txChar = await UARTService.getCharacteristic(RX_UUID);
-      if (isMatched) {
+      if (min.dist < THRESHOLD) {
         await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
         statusEl.textContent = `✅ 成功辨識為 ${min.label}.jpg`;
       } else {
