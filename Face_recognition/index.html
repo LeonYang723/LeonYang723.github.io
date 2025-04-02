@@ -9,12 +9,9 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 20px;
       background-color: #f0f0f0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
+      padding: 20px;
+      text-align: center;
     }
 
     h2 {
@@ -24,6 +21,7 @@
     .btn-container {
       display: flex;
       gap: 10px;
+      justify-content: center;
       margin-bottom: 20px;
     }
 
@@ -41,9 +39,8 @@
       position: relative;
       width: 100%;
       max-width: 640px;
-      aspect-ratio: 4/3;
-      overflow: hidden;
-      margin-bottom: 20px;
+      aspect-ratio: 4 / 3;
+      margin: 0 auto;
     }
 
     video, canvas {
@@ -55,16 +52,15 @@
       left: 0;
     }
 
-    #status {
-      margin-top: 10px;
-      color: gray;
-      font-size: 14px;
-    }
-
     #chartContainer {
       width: 100%;
       max-width: 640px;
+      margin: 20px auto;
+    }
+
+    #status {
       margin-top: 20px;
+      color: #555;
     }
   </style>
 </head>
@@ -85,7 +81,7 @@
     <canvas id="chart"></canvas>
   </div>
 
-  <div id="status">📦 正在載入模型...</div>
+  <div id="status">📦 正在載入模型與人臉資料...</div>
 
   <script>
     const video = document.getElementById("video");
@@ -111,13 +107,19 @@
           data: [],
           borderColor: "blue",
           borderWidth: 2,
-          fill: false,
+          fill: false
         }]
       },
       options: {
         scales: {
-          y: { min: 0, max: 1, title: { display: true, text: "Distance" } },
-          x: { title: { display: true, text: "Index" } }
+          y: {
+            min: 0,
+            max: 1,
+            title: { display: true, text: "Distance" }
+          },
+          x: {
+            title: { display: true, text: "Index" }
+          }
         }
       }
     });
@@ -138,12 +140,8 @@
           .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
           .withFaceLandmarks()
           .withFaceDescriptor();
-
         if (detection) {
           knownDescriptors.push({ label, descriptor: detection.descriptor });
-          console.log(`✅ 載入 ${label}.jpg 成功`);
-        } else {
-          console.warn(`⚠️ ${label}.jpg 無法偵測人臉`);
         }
       }
     }
@@ -167,11 +165,10 @@
         const server = await device.gatt.connect();
         UARTService = await server.getPrimaryService(UART_SERVICE);
         identifyBtn.disabled = false;
-        statusEl.textContent = "📶 已連接 ESP32，請進行辨識";
+        statusEl.textContent = "✅ 已連接 ESP32，請開始辨識";
         await startVideo();
       } catch (err) {
-        statusEl.textContent = "❌ 藍牙連接失敗";
-        console.error(err);
+        statusEl.textContent = "❌ 藍牙連線失敗";
       }
     }
 
@@ -183,7 +180,7 @@
         .withFaceDescriptor();
 
       if (!result) {
-        statusEl.textContent = "😕 未偵測到人臉，請再靠近一點...";
+        statusEl.textContent = "😕 未偵測到人臉，請靠近一點再試試";
         return;
       }
 
@@ -193,27 +190,23 @@
       });
 
       const descriptor = result.descriptor;
-      const matches = knownDescriptors.map(d => ({
-        label: d.label,
-        dist: faceapi.euclideanDistance(descriptor, d.descriptor)
-      }));
-      const min = matches.sort((a, b) => a.dist - b.dist)[0];
+      const match = knownDescriptors
+        .map(d => ({ label: d.label, dist: faceapi.euclideanDistance(descriptor, d.descriptor) }))
+        .sort((a, b) => a.dist - b.dist)[0];
 
-      const txChar = await UARTService.getCharacteristic(RX_UUID);
-
-      const boxColor = (min && min.dist < 0.6) ? "green" : "red";
       new faceapi.draw.DrawBox(resized.detection.box, {
-        label: `${min.label}.jpg (${min.dist.toFixed(2)})`,
-        boxColor
+        label: `${match.label}.jpg (${match.dist.toFixed(2)})`,
+        boxColor: match.dist < 0.6 ? "green" : "red"
       }).draw(canvas);
 
       chart.data.labels.push(chart.data.labels.length + 1);
-      chart.data.datasets[0].data.push(min.dist);
+      chart.data.datasets[0].data.push(match.dist);
       chart.update();
 
-      if (min && min.dist < 0.6) {
+      const txChar = await UARTService.getCharacteristic(RX_UUID);
+      if (match.dist < 0.6) {
         await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
-        statusEl.textContent = `✅ 成功辨識為 ${min.label}.jpg，門已解鎖`;
+        statusEl.textContent = `✅ 成功辨識為 ${match.label}.jpg，門已解鎖`;
       } else {
         await txChar.writeValue(new TextEncoder().encode("FAIL"));
         statusEl.textContent = "❌ 臉部不符，拒絕解鎖";
