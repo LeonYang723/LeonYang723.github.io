@@ -9,16 +9,16 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      background-color: #f4f4f4;
       margin: 0;
       padding: 20px;
+      background-color: #f0f0f0;
       display: flex;
       flex-direction: column;
       align-items: center;
     }
 
     h2 {
-      margin: 20px 0;
+      margin-bottom: 20px;
     }
 
     .btn-container {
@@ -40,8 +40,9 @@
     #videoContainer {
       position: relative;
       width: 100%;
-      max-width: 640px;
-      aspect-ratio: 4 / 3;
+      max-width: 320px;
+      aspect-ratio: 4/3;
+      overflow: hidden;
     }
 
     video, canvas {
@@ -54,21 +55,20 @@
     }
 
     #chartContainer {
+      margin-top: 20px;
       width: 100%;
-      max-width: 640px;
-      margin: 30px auto 10px;
+      max-width: 320px;
     }
 
     #status {
-      margin-top: 20px;
-      font-size: 16px;
-      color: #555;
+      margin-top: 10px;
+      font-size: 14px;
+      color: gray;
     }
   </style>
 </head>
 <body>
   <h2>🔐 臉部辨識門鎖</h2>
-
   <div class="btn-container">
     <button id="connectBtn">🔗 連接 ESP32</button>
     <button id="identifyBtn" disabled>🧠 開始辨識</button>
@@ -79,21 +79,20 @@
     <canvas id="overlay"></canvas>
   </div>
 
-  <!-- 圖表放在鏡頭區塊下方 -->
+  <!-- ✅ 圖表容器放在鏡頭區塊之後 -->
   <div id="chartContainer">
-    <canvas id="chart"></canvas>
+    <canvas id="scoreChart" height="200"></canvas>
   </div>
 
-  <div id="status">📦 正在載入模型與人臉資料...</div>
+  <div id="status">請先連接 ESP32 並等待鏡頭啟動...</div>
 
   <script>
     const video = document.getElementById("video");
     const canvas = document.getElementById("overlay");
     const ctx = canvas.getContext("2d");
-    const chartEl = document.getElementById("chart");
-    const connectBtn = document.getElementById("connectBtn");
-    const identifyBtn = document.getElementById("identifyBtn");
     const statusEl = document.getElementById("status");
+    const identifyBtn = document.getElementById("identifyBtn");
+    const connectBtn = document.getElementById("connectBtn");
 
     let UARTService;
     let knownDescriptors = [];
@@ -101,35 +100,29 @@
     const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
     const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 
-    const chart = new Chart(chartEl, {
-      type: "line",
+    const chartCtx = document.getElementById('scoreChart').getContext('2d');
+    const scoreChart = new Chart(chartCtx, {
+      type: 'bar',
       data: {
         labels: [],
         datasets: [{
-          label: "Similarity Score",
+          label: 'Similarity Score',
           data: [],
-          borderColor: "blue",
-          borderWidth: 2,
-          fill: false
+          backgroundColor: 'rgba(0, 123, 255, 0.5)',
+          borderColor: 'blue',
+          borderWidth: 2
         }]
       },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
         scales: {
-          y: {
-            min: 0,
-            max: 1,
-            title: { display: true, text: "Distance" }
-          },
-          x: {
-            title: { display: true, text: "Index" }
-          }
+          y: { beginAtZero: true, max: 1 },
+          x: { title: { display: true, text: 'Index' } }
         }
       }
     });
 
     async function loadModels() {
+      statusEl.textContent = "📦 正在載入模型...";
       await faceapi.nets.tinyFaceDetector.loadFromUri('./models');
       await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
       await faceapi.nets.faceRecognitionNet.loadFromUri('./models');
@@ -145,6 +138,7 @@
           .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
           .withFaceLandmarks()
           .withFaceDescriptor();
+
         if (detection) {
           knownDescriptors.push({ label, descriptor: detection.descriptor });
         }
@@ -158,23 +152,19 @@
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         video.play();
+        statusEl.textContent = "📷 攝影機已啟動，請按下辨識";
       };
     }
 
     async function connectBLE() {
-      try {
-        const device = await navigator.bluetooth.requestDevice({
-          acceptAllDevices: true,
-          optionalServices: [UART_SERVICE]
-        });
-        const server = await device.gatt.connect();
-        UARTService = await server.getPrimaryService(UART_SERVICE);
-        identifyBtn.disabled = false;
-        statusEl.textContent = "✅ 已連接 ESP32，請開始辨識";
-        await startVideo();
-      } catch (err) {
-        statusEl.textContent = "❌ 藍牙連線失敗";
-      }
+      const device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [UART_SERVICE]
+      });
+      const server = await device.gatt.connect();
+      UARTService = await server.getPrimaryService(UART_SERVICE);
+      identifyBtn.disabled = false;
+      await startVideo();
     }
 
     async function identifyFace() {
@@ -185,33 +175,27 @@
         .withFaceDescriptor();
 
       if (!result) {
-        statusEl.textContent = "😕 未偵測到人臉，請靠近一點再試試";
+        statusEl.textContent = "😕 沒有偵測到人臉，請靠近一點...";
         return;
       }
 
-      const resized = faceapi.resizeResults(result, {
-        width: canvas.width,
-        height: canvas.height
-      });
-
       const descriptor = result.descriptor;
-      const match = knownDescriptors
-        .map(d => ({ label: d.label, dist: faceapi.euclideanDistance(descriptor, d.descriptor) }))
-        .sort((a, b) => a.dist - b.dist)[0];
+      const results = knownDescriptors.map(item => ({
+        label: item.label,
+        dist: faceapi.euclideanDistance(descriptor, item.descriptor)
+      }));
 
-      new faceapi.draw.DrawBox(resized.detection.box, {
-        label: `${match.label}.jpg (${match.dist.toFixed(2)})`,
-        boxColor: match.dist < 0.6 ? "green" : "red"
-      }).draw(canvas);
+      const min = results.sort((a, b) => a.dist - b.dist)[0];
 
-      chart.data.labels.push(chart.data.labels.length + 1);
-      chart.data.datasets[0].data.push(match.dist);
-      chart.update();
+      // ✅ 更新圖表
+      scoreChart.data.labels = results.map(r => r.label);
+      scoreChart.data.datasets[0].data = results.map(r => r.dist);
+      scoreChart.update();
 
       const txChar = await UARTService.getCharacteristic(RX_UUID);
-      if (match.dist < 0.6) {
+      if (min && min.dist < 0.6) {
         await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
-        statusEl.textContent = `✅ 成功辨識為 ${match.label}.jpg，門已解鎖`;
+        statusEl.textContent = `✅ 成功辨識為 ${min.label}.jpg，門已解鎖`;
       } else {
         await txChar.writeValue(new TextEncoder().encode("FAIL"));
         statusEl.textContent = "❌ 臉部不符，拒絕解鎖";
