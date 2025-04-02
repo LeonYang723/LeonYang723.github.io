@@ -25,6 +25,8 @@
       display: flex;
       gap: 10px;
       margin-bottom: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
     }
 
     button {
@@ -43,6 +45,7 @@
       max-width: 320px;
       aspect-ratio: 4/3;
       overflow: hidden;
+      margin-bottom: 20px;
     }
 
     video, canvas {
@@ -55,20 +58,22 @@
     }
 
     #chartContainer {
-      margin-top: 20px;
       width: 100%;
       max-width: 320px;
+      height: 200px;
+      margin-bottom: 20px;
     }
 
     #status {
-      margin-top: 10px;
       font-size: 14px;
       color: gray;
+      text-align: center;
     }
   </style>
 </head>
 <body>
   <h2>🔐 臉部辨識門鎖</h2>
+
   <div class="btn-container">
     <button id="connectBtn">🔗 連接 ESP32</button>
     <button id="identifyBtn" disabled>🧠 開始辨識</button>
@@ -79,12 +84,11 @@
     <canvas id="overlay"></canvas>
   </div>
 
-  <!-- ✅ 圖表容器放在鏡頭區塊之後 -->
   <div id="chartContainer">
-    <canvas id="scoreChart" height="200"></canvas>
+    <canvas id="scoreChart"></canvas>
   </div>
 
-  <div id="status">請先連接 ESP32 並等待鏡頭啟動...</div>
+  <div id="status">📦 模型與人臉資料載入中...</div>
 
   <script>
     const video = document.getElementById("video");
@@ -114,6 +118,7 @@
         }]
       },
       options: {
+        responsive: true,
         scales: {
           y: { beginAtZero: true, max: 1 },
           x: { title: { display: true, text: 'Index' } }
@@ -187,7 +192,6 @@
 
       const min = results.sort((a, b) => a.dist - b.dist)[0];
 
-      // ✅ 更新圖表
       scoreChart.data.labels = results.map(r => r.label);
       scoreChart.data.datasets[0].data = results.map(r => r.dist);
       scoreChart.update();
