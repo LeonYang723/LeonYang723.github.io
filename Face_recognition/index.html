@@ -75,7 +75,7 @@
     <canvas id="overlay"></canvas>
   </div>
 
-  <!-- 放在鏡頭下方 -->
+  <!-- 圖表在鏡頭區域下方 -->
   <div id="chartContainer">
     <canvas id="scoreChart"></canvas>
   </div>
@@ -87,7 +87,6 @@
     const canvas = document.getElementById("overlay");
     const ctx = canvas.getContext("2d");
     const statusEl = document.getElementById("status");
-
     const connectBtn = document.getElementById("connectBtn");
     const identifyBtn = document.getElementById("identifyBtn");
 
@@ -97,15 +96,17 @@
     const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
     const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 
-    // Chart.js 設定
     const chart = new Chart(document.getElementById("scoreChart").getContext("2d"), {
-      type: "bar",
+      type: "line",
       data: {
         labels: [],
         datasets: [{
           label: "Similarity Score",
           data: [],
-          backgroundColor: "rgba(0, 123, 255, 0.5)"
+          borderColor: "blue",
+          backgroundColor: "rgba(0,123,255,0.5)",
+          showLine: false,
+          pointRadius: 5
         }]
       },
       options: {
@@ -172,7 +173,14 @@
         return;
       }
 
+      const resized = faceapi.resizeResults(result, {
+        width: canvas.width,
+        height: canvas.height
+      });
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       const descriptor = result.descriptor;
+
       const results = knownDescriptors.map(item => ({
         label: item.label,
         dist: faceapi.euclideanDistance(descriptor, item.descriptor)
@@ -180,12 +188,20 @@
 
       const min = results.sort((a, b) => a.dist - b.dist)[0];
 
-      // 畫圖表
+      // 畫出框框
+      const boxColor = (min && min.dist < 0.6) ? "green" : "red";
+      const drawBox = new faceapi.draw.DrawBox(resized.detection.box, {
+        label: `${min.label}.jpg (${min.dist.toFixed(2)})`,
+        boxColor: boxColor
+      });
+      drawBox.draw(canvas);
+
+      // 畫圖表（點狀）
       chart.data.labels = results.map(r => r.label);
       chart.data.datasets[0].data = results.map(r => r.dist);
       chart.update();
 
-      // 傳送藍芽指令
+      // 傳送結果
       const txChar = await UARTService.getCharacteristic(RX_UUID);
       if (min && min.dist < 0.6) {
         await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
