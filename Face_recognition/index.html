@@ -12,11 +12,9 @@
       padding: 20px;
       text-align: center;
     }
-
     .btn-container {
       margin-bottom: 20px;
     }
-
     button {
       padding: 10px 20px;
       font-size: 16px;
@@ -27,7 +25,6 @@
       cursor: pointer;
       margin: 5px;
     }
-
     #videoContainer {
       position: relative;
       width: 100%;
@@ -35,25 +32,21 @@
       margin: 0 auto;
       background: black;
     }
-
     video, canvas {
       width: 100%;
       border-radius: 10px;
     }
-
     canvas#overlay {
       position: absolute;
       top: 0;
       left: 0;
     }
-
     #chartContainer {
       margin-top: 40px;
       max-width: 360px;
       margin-left: auto;
       margin-right: auto;
     }
-
     #status {
       margin-top: 10px;
       font-size: 14px;
@@ -66,7 +59,7 @@
 
   <div class="btn-container">
     <button id="connectBtn">🔗 連接 ESP32</button>
-    <button id="identifyBtn" disabled>🧠 開始辨識</button>
+    <button id="identifyBtn" disabled>🧠 傳送向量</button>
   </div>
 
   <div id="videoContainer">
@@ -89,10 +82,6 @@
     const identifyBtn = document.getElementById("identifyBtn");
 
     let UARTService;
-    let knownDescriptors = [];
-    let indexCounter = 1;
-    const MATCH_THRESHOLD = 0.4;
-
     const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
     const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 
@@ -101,13 +90,13 @@
       data: {
         labels: [],
         datasets: [{
-          label: "Similarity Score",
+          label: "Vector Sample",
           data: [],
           borderColor: "blue",
           backgroundColor: "blue",
-          pointRadius: 5,
+          pointRadius: 3,
           fill: false,
-          tension: 0.3
+          tension: 0.2
         }]
       },
       options: {
@@ -116,7 +105,7 @@
           x: {
             title: {
               display: true,
-              text: 'Index'
+              text: 'Sample Index'
             }
           },
           y: {
@@ -132,22 +121,7 @@
       await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
       await faceapi.nets.faceLandmark68Net.loadFromUri("./models");
       await faceapi.nets.faceRecognitionNet.loadFromUri("./models");
-      await loadReferenceFaces();
-      statusEl.textContent = "✅ 模型載入完成！";
-    }
-
-    async function loadReferenceFaces() {
-      const labels = ["1", "2", "3", "4"];  // ← 你可以依照照片增加
-      for (let label of labels) {
-        const img = await faceapi.fetchImage(`./faces/${label}.jpg`);
-        const detection = await faceapi
-          .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 224 }))
-          .withFaceLandmarks()
-          .withFaceDescriptor();
-        if (detection) {
-          knownDescriptors.push({ label, descriptor: detection.descriptor });
-        }
-      }
+      statusEl.textContent = "✅ 模型載入完成，請連接 ESP32。";
     }
 
     async function startVideo() {
@@ -157,7 +131,7 @@
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         video.play();
-        statusEl.textContent = "📷 攝影機已啟動";
+        statusEl.textContent = "📷 攝影機已啟動，請開始辨識";
       };
     }
 
@@ -174,62 +148,28 @@
 
     async function identifyFace() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.5 });
 
       const result = await faceapi
-        .detectSingleFace(video, options)
+        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160 }))
         .withFaceLandmarks()
         .withFaceDescriptor();
 
       if (!result) {
-        statusEl.textContent = "😕 沒有偵測到人臉";
+        statusEl.textContent = "❌ 無法偵測人臉";
         return;
       }
 
-      const resized = faceapi.resizeResults(result, {
-        width: canvas.width,
-        height: canvas.height
-      });
-
-      const box = resized.detection.box;
-      const shrinkRatio = 0.8;
-      const offsetY = -box.height * 0.1;
-
-      const descriptor = result.descriptor; // ← 🎯 128 維向量在這裡
-
-      const results = knownDescriptors.map(item => ({
-        label: item.label,
-        dist: faceapi.euclideanDistance(descriptor, item.descriptor)
-      }));
-
-      const min = results.sort((a, b) => a.dist - b.dist)[0];
-      const isMatched = min && min.dist < MATCH_THRESHOLD;
-
-      const drawBox = new faceapi.draw.DrawBox({
-        x: box.x + box.width * (1 - shrinkRatio) / 2,
-        y: box.y + offsetY + box.height * (1 - shrinkRatio) / 2,
-        width: box.width * shrinkRatio,
-        height: box.height * shrinkRatio
-      }, {
-        label: `${min.label}.jpg (${min.dist.toFixed(2)})`,
-        boxColor: isMatched ? "green" : "red"
-      });
-      drawBox.draw(canvas);
-
-      // ✅ 圖表紀錄
-      chart.data.labels.push(indexCounter++);
-      chart.data.datasets[0].data.push(min.dist);
-      chart.update();
-
-      // ✅ 傳送藍牙指令
+      const descriptor = result.descriptor; // ← 這是 128 維向量
+      const faceVector = Array.from(descriptor).map(n => n.toFixed(6)).join(",");
       const txChar = await UARTService.getCharacteristic(RX_UUID);
-      if (isMatched) {
-        await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
-        statusEl.textContent = `✅ 成功辨識為 ${min.label}.jpg`;
-      } else {
-        await txChar.writeValue(new TextEncoder().encode("FAIL"));
-        statusEl.textContent = "❌ 拒絕開鎖";
-      }
+      await txChar.writeValue(new TextEncoder().encode(faceVector));
+
+      statusEl.textContent = "📡 已傳送 128 維向量";
+
+      // 可選：更新圖表（只用第1維當作代表）
+      chart.data.labels.push(chart.data.labels.length + 1);
+      chart.data.datasets[0].data.push(parseFloat(descriptor[0].toFixed(4)));
+      chart.update();
     }
 
     connectBtn.onclick = connectBLE;
