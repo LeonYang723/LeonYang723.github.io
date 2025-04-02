@@ -36,7 +36,7 @@
       background: black;
     }
 
-    video {
+    video, canvas {
       width: 100%;
       border-radius: 10px;
     }
@@ -85,7 +85,6 @@
     const canvas = document.getElementById("overlay");
     const ctx = canvas.getContext("2d");
     const statusEl = document.getElementById("status");
-
     const connectBtn = document.getElementById("connectBtn");
     const identifyBtn = document.getElementById("identifyBtn");
 
@@ -102,14 +101,15 @@
         datasets: [{
           label: "Similarity Score",
           data: [],
-          backgroundColor: "blue",
           borderColor: "blue",
-          borderWidth: 2,
+          backgroundColor: "blue",
           pointRadius: 5,
-          fill: false
+          fill: false,
+          tension: 0.3
         }]
       },
       options: {
+        responsive: true,
         scales: {
           y: { beginAtZero: true, max: 1 }
         }
@@ -130,7 +130,7 @@
       for (let label of labels) {
         const img = await faceapi.fetchImage(`./faces/${label}.jpg`);
         const detection = await faceapi
-          .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.5 }))
+          .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 224 }))
           .withFaceLandmarks()
           .withFaceDescriptor();
         if (detection) {
@@ -163,8 +163,10 @@
 
     async function identifyFace() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.5 });
+
       const result = await faceapi
-        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.5 }))
+        .detectSingleFace(video, options)
         .withFaceLandmarks()
         .withFaceDescriptor();
 
@@ -178,6 +180,20 @@
         height: canvas.height
       });
 
+      // 👉 手動畫框往上縮小
+      const box = resized.detection.box;
+      const shrinkRatio = 0.8;
+      const offsetY = -box.height * 0.1;
+      const drawBox = new faceapi.draw.DrawBox({
+        x: box.x + box.width * (1 - shrinkRatio) / 2,
+        y: box.y + offsetY + box.height * (1 - shrinkRatio) / 2,
+        width: box.width * shrinkRatio,
+        height: box.height * shrinkRatio
+      }, {
+        label: "",
+        boxColor: "green"
+      });
+
       const descriptor = result.descriptor;
       const results = knownDescriptors.map(item => ({
         label: item.label,
@@ -186,24 +202,15 @@
 
       const min = results.sort((a, b) => a.dist - b.dist)[0];
 
-      // 顯示辨識框
-      const drawBox = new faceapi.draw.DrawBox(resized.detection.box, {
-        label: `${min.label}.jpg (${min.dist.toFixed(2)})`,
-        boxColor: min.dist < 0.6 ? "green" : "red"
-      });
+      drawBox.options.label = `${min.label}.jpg (${min.dist.toFixed(2)})`;
       drawBox.draw(canvas);
 
-      // 畫圖表資料點
-      const timeLabel = (new Date()).toLocaleTimeString();
-      chart.data.labels.push(timeLabel);
+      // Chart 更新
+      chart.data.labels.push(min.label);
       chart.data.datasets[0].data.push(min.dist);
-      if (chart.data.labels.length > 10) {
-        chart.data.labels.shift();
-        chart.data.datasets[0].data.shift();
-      }
       chart.update();
 
-      // 傳送藍牙
+      // 傳送藍芽訊號
       const txChar = await UARTService.getCharacteristic(RX_UUID);
       if (min && min.dist < 0.6) {
         await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
