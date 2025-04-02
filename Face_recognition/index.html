@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <title>ESP32 臉部辨識門鎖</title>
   <script src="./face-api.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -12,9 +11,9 @@
       padding: 20px;
       text-align: center;
     }
-    .btn-container {
-      margin-bottom: 20px;
-    }
+
+    .btn-container { margin-bottom: 20px; }
+
     button {
       padding: 10px 20px;
       font-size: 16px;
@@ -25,6 +24,7 @@
       cursor: pointer;
       margin: 5px;
     }
+
     #videoContainer {
       position: relative;
       width: 100%;
@@ -32,21 +32,18 @@
       margin: 0 auto;
       background: black;
     }
+
     video, canvas {
       width: 100%;
       border-radius: 10px;
     }
+
     canvas#overlay {
       position: absolute;
       top: 0;
       left: 0;
     }
-    #chartContainer {
-      margin-top: 40px;
-      max-width: 360px;
-      margin-left: auto;
-      margin-right: auto;
-    }
+
     #status {
       margin-top: 10px;
       font-size: 14px;
@@ -59,16 +56,12 @@
 
   <div class="btn-container">
     <button id="connectBtn">🔗 連接 ESP32</button>
-    <button id="identifyBtn" disabled>📤 傳送向量</button>
+    <button id="identifyBtn" disabled>🧠 傳送向量</button>
   </div>
 
   <div id="videoContainer">
     <video id="video" autoplay muted playsinline></video>
     <canvas id="overlay"></canvas>
-  </div>
-
-  <div id="chartContainer">
-    <canvas id="scoreChart"></canvas>
   </div>
 
   <div id="status">📦 載入中...</div>
@@ -85,82 +78,41 @@
     const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
     const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 
-    const chart = new Chart(document.getElementById("scoreChart").getContext("2d"), {
-      type: "line",
-      data: {
-        labels: [],
-        datasets: [{
-          label: "Vector Value (第1維)",
-          data: [],
-          borderColor: "blue",
-          backgroundColor: "blue",
-          pointRadius: 4,
-          fill: false,
-          tension: 0.2
-        }]
-      },
-      options: {
-        responsive: true,
-        scales: {
-          x: {
-            title: { display: true, text: 'Sample Index' }
-          },
-          y: {
-            beginAtZero: true,
-            max: 1
-          }
-        }
-      }
-    });
-
     async function loadModels() {
       statusEl.textContent = "📦 載入模型中...";
       await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
       await faceapi.nets.faceLandmark68Net.loadFromUri("./models");
       await faceapi.nets.faceRecognitionNet.loadFromUri("./models");
-      statusEl.textContent = "✅ 模型載入完成，請連接 ESP32";
+      statusEl.textContent = "✅ 模型載入完成，請連接 ESP32。";
     }
 
     async function startVideo() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user" },
-          audio: false
-        });
-        video.srcObject = stream;
-        video.onloadedmetadata = () => {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          video.play();
-          statusEl.textContent = "📷 攝影機已啟動，請開始辨識";
-        };
-      } catch (err) {
-        console.error("❌ 無法啟用攝影機：", err);
-        alert("請允許使用攝影機權限，並使用 HTTPS 或 localhost 開啟頁面。");
-      }
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+      video.onloadedmetadata = () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        video.play();
+        statusEl.textContent = "📷 攝影機已啟動";
+      };
     }
 
     async function connectBLE() {
-      try {
-        const device = await navigator.bluetooth.requestDevice({
-          acceptAllDevices: true,
-          optionalServices: [UART_SERVICE]
-        });
-        const server = await device.gatt.connect();
-        UARTService = await server.getPrimaryService(UART_SERVICE);
-        identifyBtn.disabled = false;
-        await startVideo();
-      } catch (err) {
-        console.error("❌ 藍牙連接失敗：", err);
-        statusEl.textContent = "❌ 藍牙連接失敗";
-      }
+      const device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [UART_SERVICE]
+      });
+      const server = await device.gatt.connect();
+      UARTService = await server.getPrimaryService(UART_SERVICE);
+      identifyBtn.disabled = false;
+      await startVideo();
     }
 
     async function identifyFace() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       const result = await faceapi
-        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.5 }))
+        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160 }))
         .withFaceLandmarks()
         .withFaceDescriptor();
 
@@ -169,23 +121,25 @@
         return;
       }
 
-      const descriptor = result.descriptor;
-      const faceVector = Array.from(descriptor).map(n => n.toFixed(6)).join(",");
+      const descriptor = Array.from(result.descriptor).map(n => n.toFixed(6)); // 精確化
 
-      // 發送到 ESP32
       try {
         const txChar = await UARTService.getCharacteristic(RX_UUID);
-        await txChar.writeValue(new TextEncoder().encode(faceVector));
-        statusEl.textContent = "✅ 已傳送 128 維向量";
-      } catch (err) {
-        statusEl.textContent = "❌ 傳送失敗";
-        console.error("BLE 傳送錯誤：", err);
-      }
+        statusEl.textContent = "📡 傳送中...";
 
-      // 圖表紀錄（使用 descriptor[0] 作為代表）
-      chart.data.labels.push(chart.data.labels.length + 1);
-      chart.data.datasets[0].data.push(parseFloat(descriptor[0].toFixed(4)));
-      chart.update();
+        // 🔁 分段傳送，每段 5 個維度（約 50 byte）
+        for (let i = 0; i < descriptor.length; i += 5) {
+          const chunk = descriptor.slice(i, i + 5).join(","); // 用逗號串接
+          await txChar.writeValue(new TextEncoder().encode(chunk));
+          await new Promise(resolve => setTimeout(resolve, 100)); // 避免過快發送
+        }
+
+        statusEl.textContent = "✅ 向量已全部傳送完畢";
+
+      } catch (err) {
+        console.error("❌ 傳送錯誤：", err);
+        statusEl.textContent = "❌ 傳送失敗：" + err;
+      }
     }
 
     connectBtn.onclick = connectBLE;
