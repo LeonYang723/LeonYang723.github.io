@@ -12,21 +12,19 @@
       margin: 0;
       padding: 20px;
       background-color: #f0f0f0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
     }
 
     h2 {
+      text-align: center;
       margin-bottom: 20px;
     }
 
     .btn-container {
       display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
       justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
     }
 
     button {
@@ -39,12 +37,17 @@
       cursor: pointer;
     }
 
+    .main-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
     #videoContainer {
       position: relative;
       width: 100%;
       max-width: 320px;
       aspect-ratio: 4/3;
-      overflow: hidden;
       margin-bottom: 20px;
     }
 
@@ -60,43 +63,46 @@
     #chartContainer {
       width: 100%;
       max-width: 320px;
-      height: 200px;
+      margin-top: 10px;
       margin-bottom: 20px;
     }
 
     #status {
       font-size: 14px;
-      color: gray;
       text-align: center;
+      color: gray;
     }
   </style>
 </head>
 <body>
   <h2>🔐 臉部辨識門鎖</h2>
 
-  <div class="btn-container">
-    <button id="connectBtn">🔗 連接 ESP32</button>
-    <button id="identifyBtn" disabled>🧠 開始辨識</button>
-  </div>
+  <div class="main-content">
+    <div class="btn-container">
+      <button id="connectBtn">🔗 連接 ESP32</button>
+      <button id="identifyBtn" disabled>🧠 開始辨識</button>
+    </div>
 
-  <div id="videoContainer">
-    <video id="video" autoplay muted playsinline></video>
-    <canvas id="overlay"></canvas>
-  </div>
+    <div id="videoContainer">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="overlay"></canvas>
+    </div>
 
-  <div id="chartContainer">
-    <canvas id="scoreChart"></canvas>
-  </div>
+    <!-- ✅ 圖表放在鏡頭區塊下方 -->
+    <div id="chartContainer">
+      <canvas id="scoreChart"></canvas>
+    </div>
 
-  <div id="status">📦 模型與人臉資料載入中...</div>
+    <div id="status">📦 模型與人臉資料載入中...</div>
+  </div>
 
   <script>
     const video = document.getElementById("video");
     const canvas = document.getElementById("overlay");
     const ctx = canvas.getContext("2d");
-    const statusEl = document.getElementById("status");
-    const identifyBtn = document.getElementById("identifyBtn");
     const connectBtn = document.getElementById("connectBtn");
+    const identifyBtn = document.getElementById("identifyBtn");
+    const statusEl = document.getElementById("status");
 
     let UARTService;
     let knownDescriptors = [];
@@ -104,33 +110,36 @@
     const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
     const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 
-    const chartCtx = document.getElementById('scoreChart').getContext('2d');
+    const chartCtx = document.getElementById("scoreChart").getContext("2d");
     const scoreChart = new Chart(chartCtx, {
-      type: 'bar',
+      type: "bar",
       data: {
         labels: [],
         datasets: [{
-          label: 'Similarity Score',
+          label: "Similarity Score",
           data: [],
-          backgroundColor: 'rgba(0, 123, 255, 0.5)',
-          borderColor: 'blue',
-          borderWidth: 2
+          backgroundColor: "rgba(0, 123, 255, 0.5)",
+          borderColor: "blue",
+          borderWidth: 1
         }]
       },
       options: {
         responsive: true,
+        maintainAspectRatio: false,
         scales: {
-          y: { beginAtZero: true, max: 1 },
-          x: { title: { display: true, text: 'Index' } }
+          y: {
+            beginAtZero: true,
+            max: 1
+          }
         }
       }
     });
 
     async function loadModels() {
       statusEl.textContent = "📦 正在載入模型...";
-      await faceapi.nets.tinyFaceDetector.loadFromUri('./models');
-      await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
-      await faceapi.nets.faceRecognitionNet.loadFromUri('./models');
+      await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
+      await faceapi.nets.faceLandmark68Net.loadFromUri("./models");
+      await faceapi.nets.faceRecognitionNet.loadFromUri("./models");
       await loadReferenceFaces();
       statusEl.textContent = "✅ 模型與人臉資料載入完成，請連接 ESP32。";
     }
