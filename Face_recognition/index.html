@@ -1,75 +1,62 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ESP32 人臉辨識門鎖</title>
+  <meta charset="UTF-8">
+  <title>ESP32 臉部辨識門鎖</title>
   <script src="./face-api.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
-      margin: 0;
+      background: #f0f0f0;
       padding: 20px;
-      background-color: #f0f0f0;
-    }
-
-    h2 {
       text-align: center;
-      margin-bottom: 20px;
     }
 
     .btn-container {
-      display: flex;
-      justify-content: center;
-      gap: 10px;
-      flex-wrap: wrap;
       margin-bottom: 20px;
     }
 
     button {
-      padding: 12px 20px;
+      padding: 10px 20px;
       font-size: 16px;
       border: none;
       border-radius: 8px;
-      background-color: #007bff;
+      background: #007bff;
       color: white;
       cursor: pointer;
-    }
-
-    .main-content {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
+      margin: 5px;
     }
 
     #videoContainer {
       position: relative;
       width: 100%;
-      max-width: 320px;
-      aspect-ratio: 4/3;
-      margin-bottom: 20px;
+      max-width: 360px;
+      margin: 0 auto;
+      background: black;
     }
 
-    video, canvas {
+    video {
       width: 100%;
-      height: 100%;
-      border-radius: 12px;
+      border-radius: 10px;
+    }
+
+    canvas#overlay {
       position: absolute;
       top: 0;
       left: 0;
     }
 
     #chartContainer {
-      width: 100%;
-      max-width: 320px;
-      margin-top: 10px;
-      margin-bottom: 20px;
+      margin-top: 20px;
+      max-width: 360px;
+      margin-left: auto;
+      margin-right: auto;
     }
 
     #status {
+      margin-top: 10px;
       font-size: 14px;
-      text-align: center;
       color: gray;
     }
   </style>
@@ -77,32 +64,32 @@
 <body>
   <h2>🔐 臉部辨識門鎖</h2>
 
-  <div class="main-content">
-    <div class="btn-container">
-      <button id="connectBtn">🔗 連接 ESP32</button>
-      <button id="identifyBtn" disabled>🧠 開始辨識</button>
-    </div>
-
-    <div id="videoContainer">
-      <video id="video" autoplay muted playsinline></video>
-      <canvas id="overlay"></canvas>
-    </div>
-
-    <!-- ✅ 圖表放在鏡頭區塊下方 -->
-    <div id="chartContainer">
-      <canvas id="scoreChart"></canvas>
-    </div>
-
-    <div id="status">📦 模型與人臉資料載入中...</div>
+  <div class="btn-container">
+    <button id="connectBtn">🔗 連接 ESP32</button>
+    <button id="identifyBtn" disabled>🧠 開始辨識</button>
   </div>
+
+  <!-- 鏡頭區域 -->
+  <div id="videoContainer">
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="overlay"></canvas>
+  </div>
+
+  <!-- 放在鏡頭下方 -->
+  <div id="chartContainer">
+    <canvas id="scoreChart"></canvas>
+  </div>
+
+  <div id="status">📦 載入中...</div>
 
   <script>
     const video = document.getElementById("video");
     const canvas = document.getElementById("overlay");
     const ctx = canvas.getContext("2d");
+    const statusEl = document.getElementById("status");
+
     const connectBtn = document.getElementById("connectBtn");
     const identifyBtn = document.getElementById("identifyBtn");
-    const statusEl = document.getElementById("status");
 
     let UARTService;
     let knownDescriptors = [];
@@ -110,38 +97,32 @@
     const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
     const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 
-    const chartCtx = document.getElementById("scoreChart").getContext("2d");
-    const scoreChart = new Chart(chartCtx, {
+    // Chart.js 設定
+    const chart = new Chart(document.getElementById("scoreChart").getContext("2d"), {
       type: "bar",
       data: {
         labels: [],
         datasets: [{
           label: "Similarity Score",
           data: [],
-          backgroundColor: "rgba(0, 123, 255, 0.5)",
-          borderColor: "blue",
-          borderWidth: 1
+          backgroundColor: "rgba(0, 123, 255, 0.5)"
         }]
       },
       options: {
         responsive: true,
-        maintainAspectRatio: false,
         scales: {
-          y: {
-            beginAtZero: true,
-            max: 1
-          }
+          y: { beginAtZero: true, max: 1 }
         }
       }
     });
 
     async function loadModels() {
-      statusEl.textContent = "📦 正在載入模型...";
+      statusEl.textContent = "📦 載入模型中...";
       await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
       await faceapi.nets.faceLandmark68Net.loadFromUri("./models");
       await faceapi.nets.faceRecognitionNet.loadFromUri("./models");
       await loadReferenceFaces();
-      statusEl.textContent = "✅ 模型與人臉資料載入完成，請連接 ESP32。";
+      statusEl.textContent = "✅ 模型載入完成！";
     }
 
     async function loadReferenceFaces() {
@@ -152,7 +133,6 @@
           .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
           .withFaceLandmarks()
           .withFaceDescriptor();
-
         if (detection) {
           knownDescriptors.push({ label, descriptor: detection.descriptor });
         }
@@ -160,13 +140,13 @@
     }
 
     async function startVideo() {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       video.srcObject = stream;
       video.onloadedmetadata = () => {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         video.play();
-        statusEl.textContent = "📷 攝影機已啟動，請按下辨識";
+        statusEl.textContent = "📷 攝影機已啟動";
       };
     }
 
@@ -182,14 +162,13 @@
     }
 
     async function identifyFace() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
       const result = await faceapi
         .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
         .withFaceLandmarks()
         .withFaceDescriptor();
 
       if (!result) {
-        statusEl.textContent = "😕 沒有偵測到人臉，請靠近一點...";
+        statusEl.textContent = "😕 沒有偵測到人臉";
         return;
       }
 
@@ -201,17 +180,19 @@
 
       const min = results.sort((a, b) => a.dist - b.dist)[0];
 
-      scoreChart.data.labels = results.map(r => r.label);
-      scoreChart.data.datasets[0].data = results.map(r => r.dist);
-      scoreChart.update();
+      // 畫圖表
+      chart.data.labels = results.map(r => r.label);
+      chart.data.datasets[0].data = results.map(r => r.dist);
+      chart.update();
 
+      // 傳送藍芽指令
       const txChar = await UARTService.getCharacteristic(RX_UUID);
       if (min && min.dist < 0.6) {
         await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
-        statusEl.textContent = `✅ 成功辨識為 ${min.label}.jpg，門已解鎖`;
+        statusEl.textContent = `✅ 成功辨識為 ${min.label}.jpg`;
       } else {
         await txChar.writeValue(new TextEncoder().encode("FAIL"));
-        statusEl.textContent = "❌ 臉部不符，拒絕解鎖";
+        statusEl.textContent = "❌ 拒絕開鎖";
       }
     }
 
