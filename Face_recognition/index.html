@@ -16,9 +16,11 @@
       flex-direction: column;
       align-items: center;
     }
+
     h2 {
       margin-bottom: 20px;
     }
+
     .btn-container {
       display: flex;
       gap: 10px;
@@ -26,6 +28,7 @@
       flex-wrap: wrap;
       justify-content: center;
     }
+
     button {
       padding: 12px 20px;
       font-size: 16px;
@@ -35,6 +38,7 @@
       color: white;
       cursor: pointer;
     }
+
     #videoContainer {
       position: relative;
       width: 100%;
@@ -42,6 +46,7 @@
       aspect-ratio: 4/3;
       overflow: hidden;
     }
+
     video, canvas {
       width: 100%;
       height: 100%;
@@ -50,15 +55,22 @@
       top: 0;
       left: 0;
     }
+
     #status {
       margin-top: 10px;
       color: gray;
       font-size: 14px;
     }
-    #chartContainer {
-      margin-top: 30px;
-      width: 90%;
-      max-width: 600px;
+
+    #chartWrapper {
+      width: 100%;
+      max-width: 640px;
+      margin-top: 20px;
+      display: none;
+      background: white;
+      padding: 10px;
+      border-radius: 12px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.2);
     }
   </style>
 </head>
@@ -77,8 +89,8 @@
 
   <div id="status">請先連接 ESP32 並等待鏡頭啟動...</div>
 
-  <div id="chartContainer">
-    <canvas id="faceChart"></canvas>
+  <div id="chartWrapper">
+    <canvas id="chartCanvas"></canvas>
   </div>
 
   <script>
@@ -88,43 +100,15 @@
     const connectBtn = document.getElementById("connectBtn");
     const identifyBtn = document.getElementById("identifyBtn");
     const statusEl = document.getElementById("status");
+    const chartWrapper = document.getElementById("chartWrapper");
+    const chartCanvas = document.getElementById("chartCanvas");
 
     let UARTService;
     let knownDescriptors = [];
+    let similarityChart = null;
 
     const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
     const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
-
-    const chartCtx = document.getElementById("faceChart").getContext("2d");
-    const faceChart = new Chart(chartCtx, {
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: [{
-          label: '臉部對比相似度 (越小越準確)',
-          data: [],
-          borderColor: 'blue',
-          borderWidth: 2,
-          tension: 0.3,
-          fill: false
-        }]
-      },
-      options: {
-        scales: {
-          y: {
-            suggestedMin: 0,
-            suggestedMax: 1
-          }
-        }
-      }
-    });
-
-    function updateChart(value) {
-      const now = new Date().toLocaleTimeString();
-      faceChart.data.labels.push(now);
-      faceChart.data.datasets[0].data.push(value);
-      faceChart.update();
-    }
 
     async function loadModels() {
       try {
@@ -132,7 +116,6 @@
         await faceapi.nets.tinyFaceDetector.loadFromUri('./models');
         await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
         await faceapi.nets.faceRecognitionNet.loadFromUri('./models');
-
         console.log("✅ 模型載入完成！");
         await loadReferenceFaces();
         statusEl.textContent = "✅ 模型與人臉資料載入完成，請連接 ESP32。";
@@ -164,7 +147,6 @@
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
         video.srcObject = stream;
-
         video.onloadedmetadata = () => {
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
@@ -187,7 +169,6 @@
         const server = await device.gatt.connect();
         UARTService = await server.getPrimaryService(UART_SERVICE);
         console.log("✅ 已連線 ESP32");
-
         identifyBtn.disabled = false;
         await startVideo();
       } catch (err) {
@@ -216,7 +197,10 @@
 
         const descriptor = result.descriptor;
         const min = knownDescriptors
-          .map(item => ({ label: item.label, dist: faceapi.euclideanDistance(descriptor, item.descriptor) }))
+          .map(item => ({
+            label: item.label,
+            dist: faceapi.euclideanDistance(descriptor, item.descriptor)
+          }))
           .sort((a, b) => a.dist - b.dist)[0];
 
         const boxColor = (min && min.dist < 0.6) ? "green" : "red";
@@ -226,20 +210,55 @@
         });
         drawBox.draw(canvas);
 
+        chartWrapper.style.display = "block";
         updateChart(min.dist);
 
-        const txChar = await UARTService.getCharacteristic(RX_UUID);
-        if (min && min.dist < 0.6) {
-          await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
-          statusEl.textContent = `✅ 成功辨識為 ${min.label}.jpg，門已解鎖`;
-        } else {
-          await txChar.writeValue(new TextEncoder().encode("FAIL"));
-          statusEl.textContent = "❌ 臉部不符，拒絕解鎖";
+        try {
+          const txChar = await UARTService.getCharacteristic(RX_UUID);
+          if (min && min.dist < 0.6) {
+            await txChar.writeValue(new TextEncoder().encode("UNLOCK"));
+            statusEl.textContent = `✅ 成功辨識為 ${min.label}.jpg，門已解鎖`;
+          } else {
+            await txChar.writeValue(new TextEncoder().encode("FAIL"));
+            statusEl.textContent = "❌ 臉部不符，拒絕解鎖";
+          }
+        } catch (err) {
+          console.error("❌ 傳送失敗：", err);
+          statusEl.textContent = "❌ 藍牙錯誤，請重新連線";
         }
+
       } catch (err) {
-        console.error("❌ 辨識過程錯誤：", err);
+        console.error("❌ 辨識錯誤：", err);
         statusEl.textContent = "❌ 辨識失敗，請重試";
       }
+    }
+
+    function updateChart(value) {
+      if (!similarityChart) {
+        similarityChart = new Chart(chartCanvas, {
+          type: "line",
+          data: {
+            labels: [],
+            datasets: [{
+              label: "Similarity Distance",
+              data: [],
+              borderWidth: 2,
+              borderColor: "blue",
+              fill: false
+            }]
+          },
+          options: {
+            responsive: true,
+            scales: {
+              y: { min: 0, max: 1, title: { display: true, text: "Distance" } },
+              x: { title: { display: true, text: "Index" } }
+            }
+          }
+        });
+      }
+      similarityChart.data.labels.push(similarityChart.data.labels.length + 1);
+      similarityChart.data.datasets[0].data.push(value);
+      similarityChart.update();
     }
 
     connectBtn.onclick = connectBLE;
