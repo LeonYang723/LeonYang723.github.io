@@ -136,7 +136,7 @@
     }
 
     async function loadReferenceFaces() {
-      const labels = ["1", "2", "3"];
+      const labels = ["1", "2", "3", "4"];
       for (let label of labels) {
         const img = await faceapi.fetchImage(`./faces/${label}.jpg`);
         const detection = await faceapi
