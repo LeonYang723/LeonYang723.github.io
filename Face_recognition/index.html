@@ -102,23 +102,25 @@
       }
     }
 
-   async function sendDescriptorInChunks(descriptor) {
   async function sendDescriptorInChunks(descriptor) {
   const txChar = await UARTService.getCharacteristic(RX_UUID);
-  const CHUNK_SIZE = 5; // 每次傳 5 維
+  const CHUNK_SIZE = 5;
   const totalChunks = Math.ceil(descriptor.length / CHUNK_SIZE);
 
   for (let i = 0; i < descriptor.length; i += CHUNK_SIZE) {
     const chunk = descriptor.slice(i, i + CHUNK_SIZE);
-    const payload = chunk.map(n => n.toFixed(6)).join(" "); // 用空格分隔
+    const payload = chunk.map(n => n.toFixed(6)).join(" ");
     const header = `CHUNK:${i / CHUNK_SIZE + 1}/${totalChunks}|`;
     const message = header + payload;
+
+    console.log("📤 傳送 chunk:", message); // ✅ 除錯用
     await txChar.writeValue(new TextEncoder().encode(message));
-    await new Promise(resolve => setTimeout(resolve, 100)); // 避免過快
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
 
   statusEl.textContent = "✅ 全部向量傳送完成";
 }
+
 
 
     async function detectAndSend() {
