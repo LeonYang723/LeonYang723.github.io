@@ -102,7 +102,7 @@
       }
     }
 
-  async function sendDescriptorInChunks(descriptor) {
+ async function sendDescriptorInChunks(descriptor) {
   const txChar = await UARTService.getCharacteristic(RX_UUID);
   const CHUNK_SIZE = 5;
   const totalChunks = Math.ceil(descriptor.length / CHUNK_SIZE);
@@ -110,10 +110,11 @@
   for (let i = 0; i < descriptor.length; i += CHUNK_SIZE) {
     const chunk = descriptor.slice(i, i + CHUNK_SIZE);
     const payload = chunk.map(n => n.toFixed(6)).join(" ");
-    const header = `CHUNK:${i / CHUNK_SIZE + 1}/${totalChunks}|`;
+    const chunkIndex = Math.floor(i / CHUNK_SIZE) + 1;
+    const header = `CHUNK:${chunkIndex}/${totalChunks}|`;
     const message = header + payload;
 
-    console.log("📤 傳送 chunk:", message); // ✅ 除錯用
+    console.log("📤 傳送 chunk:", message);
     await txChar.writeValue(new TextEncoder().encode(message));
     await new Promise(resolve => setTimeout(resolve, 100));
   }
