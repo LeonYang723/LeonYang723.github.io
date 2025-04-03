@@ -104,23 +104,23 @@
 
  async function sendDescriptorInChunks(descriptor) {
   const txChar = await UARTService.getCharacteristic(RX_UUID);
-  const CHUNK_SIZE = 5;
-  const totalChunks = Math.ceil(descriptor.length / CHUNK_SIZE);
+  const CHUNK_SIZE = 1;  // ⚠️ 每次傳一筆，最穩定
+  const totalChunks = descriptor.length;
 
   for (let i = 0; i < descriptor.length; i += CHUNK_SIZE) {
     const chunk = descriptor.slice(i, i + CHUNK_SIZE);
     const payload = chunk.map(n => n.toFixed(6)).join(" ");
-    const chunkIndex = Math.floor(i / CHUNK_SIZE) + 1;
-    const header = `CHUNK:${chunkIndex}/${totalChunks}|`;
+    const header = `CHUNK:${i / CHUNK_SIZE + 1}/${totalChunks}|`;
     const message = header + payload;
 
     console.log("📤 傳送 chunk:", message);
     await txChar.writeValue(new TextEncoder().encode(message));
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 50)); // 微延遲
   }
 
   statusEl.textContent = "✅ 全部向量傳送完成";
 }
+
 
 
 
