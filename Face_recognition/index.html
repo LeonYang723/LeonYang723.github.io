@@ -104,16 +104,15 @@
 
    async function sendDescriptorInChunks(descriptor) {
   const txChar = await UARTService.getCharacteristic(RX_UUID);
-  const CHUNK_SIZE = 5;
-  const totalChunks = Math.ceil(descriptor.length / CHUNK_SIZE);
+  const CHUNK_SIZE = 5; // 每個 chunk 傳送 5 維
+for (let i = 0; i < descriptor.length; i += CHUNK_SIZE) {
+  const chunk = descriptor.slice(i, i + CHUNK_SIZE);
+  const payload = chunk.map(n => n.toFixed(6)).join(" ");
+  const header = `CHUNK:${i / CHUNK_SIZE + 1}/26|`;
+  await txChar.writeValue(new TextEncoder().encode(header + payload));
+  await new Promise(resolve => setTimeout(resolve, 100));
+}
 
-  for (let i = 0; i < descriptor.length; i += CHUNK_SIZE) {
-    const chunk = descriptor.slice(i, i + CHUNK_SIZE);
-    const payload = chunk.map(n => n.toFixed(6)).join(" ");  // ⚠️ 改成空格
-    const header = `CHUNK:${i / CHUNK_SIZE + 1}/${totalChunks}|`;
-    await txChar.writeValue(new TextEncoder().encode(header + payload));
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
 
   statusEl.textContent = "✅ 128 維向量已分段傳送完畢";
 }
