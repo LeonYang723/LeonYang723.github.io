@@ -1,465 +1,576 @@
-from pathlib import Path
-
-apps_url = "https://script.google.com/macros/s/AKfycbzOLGC2_VfdzHhQ6gALIu0wPzriYA1iDep9GBeFo1Jx8hvi73Mhf-TzUkB-Nlwc9q1UcQ/exec"
-
-html = f"""<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ESP32 臉部辨識門鎖</title>
+
   <script src="./face-api.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <style>
-    body {{
+    body{
       font-family: Arial, sans-serif;
-      background: #f0f0f0;
-      padding: 20px;
-      text-align: center;
-    }}
-    .btn-container, .otp-container, .register-container {{
-      margin-bottom: 20px;
-    }}
-    button {{
-      padding: 10px 20px;
-      font-size: 16px;
-      border: none;
-      border-radius: 8px;
-      background: #007bff;
-      color: white;
-      cursor: pointer;
-      margin: 5px;
-    }}
-    button:disabled {{
-      background: #999;
-      cursor: not-allowed;
-    }}
-    input {{
-      padding: 10px;
-      font-size: 15px;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      margin: 5px;
-      width: 240px;
-      max-width: 90%;
-    }}
-    #videoContainer {{
-      position: relative;
-      width: 100%;
-      max-width: 360px;
-      margin: 0 auto;
-      background: black;
-    }}
-    video, canvas {{
-      width: 100%;
-      border-radius: 10px;
-    }}
-    canvas#overlay {{
-      position: absolute;
-      top: 0;
-      left: 0;
-    }}
-    #chartContainer, #tableContainer {{
-      margin-top: 40px;
-      max-width: 360px;
-      margin-left: auto;
-      margin-right: auto;
-    }}
-    #status {{
-      margin-top: 10px;
-      font-size: 14px;
-      color: gray;
-    }}
-    .panel {{
-      max-width: 420px;
-      margin: 20px auto;
-      padding: 15px;
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    }}
-    table {{
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 15px;
-      font-size: 14px;
-    }}
-    th, td {{
-      border: 1px solid #ccc;
-      padding: 6px;
-    }}
-    th {{
-      background: #007bff;
-      color: white;
-    }}
+      background:#f2f2f2;
+      text-align:center;
+      padding:20px;
+    }
+
+    h2{
+      margin-bottom:20px;
+    }
+
+    button{
+      padding:10px 18px;
+      border:none;
+      border-radius:10px;
+      background:#007bff;
+      color:white;
+      font-size:16px;
+      cursor:pointer;
+      margin:5px;
+    }
+
+    button:disabled{
+      background:#999;
+    }
+
+    input{
+      padding:10px;
+      border-radius:8px;
+      border:1px solid #ccc;
+      margin:5px;
+      width:250px;
+      max-width:90%;
+    }
+
+    .panel{
+      background:white;
+      padding:20px;
+      border-radius:15px;
+      max-width:400px;
+      margin:20px auto;
+      box-shadow:0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    #videoContainer{
+      position:relative;
+      width:360px;
+      max-width:95%;
+      margin:auto;
+      background:black;
+      border-radius:10px;
+      overflow:hidden;
+    }
+
+    video, canvas{
+      width:100%;
+    }
+
+    canvas{
+      position:absolute;
+      top:0;
+      left:0;
+    }
+
+    #status{
+      margin-top:15px;
+      color:#555;
+      font-size:14px;
+    }
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+      margin-top:20px;
+      background:white;
+    }
+
+    th, td{
+      border:1px solid #ddd;
+      padding:8px;
+      font-size:14px;
+    }
+
+    th{
+      background:#007bff;
+      color:white;
+    }
+
+    #chartContainer{
+      width:360px;
+      max-width:95%;
+      margin:30px auto;
+    }
   </style>
 </head>
+
 <body>
-  <h2>🔐 臉部辨識門鎖</h2>
 
-  <div class="btn-container">
-    <button id="connectBtn">🔗 連接 ESP32</button>
-    <button id="identifyBtn" disabled>🧠 開始辨識</button>
+<h2>🔐 臉部辨識門鎖</h2>
+
+<button id="connectBtn">🔗 連接 ESP32</button>
+<button id="identifyBtn" disabled>🧠 開始辨識</button>
+
+<div class="panel">
+  <h3>📸 使用者臉部資料註冊</h3>
+
+  <input type="text" id="newLabelInput" placeholder="請輸入使用者名稱">
+  <br>
+
+  <input type="file" id="faceImageInput" accept="image/*">
+  <br>
+
+  <button id="registerFaceBtn">新增臉部資料</button>
+
+  <div style="font-size:13px;color:#666;margin-top:10px;">
+    本功能僅暫存於目前瀏覽器，不會直接寫入 GitHub
   </div>
+</div>
 
-  <div class="panel register-container">
-    <h3>📸 使用者臉部資料註冊</h3>
-    <input type="text" id="newLabelInput" placeholder="請輸入使用者名稱，例如 Leon">
-    <br>
-    <input type="file" id="faceImageInput" accept="image/*">
-    <br>
-    <button id="registerFaceBtn">新增臉部資料</button>
-    <div style="font-size:13px;color:#666;margin-top:8px;">
-      注意：此功能會將上傳照片轉成 128 維向量並暫存在本次瀏覽器頁面中，不會直接寫入 GitHub。
-    </div>
-  </div>
+<div class="panel" id="otpPanel" style="display:none;">
+  <h3>📧 Email 二次驗證</h3>
 
-  <div class="panel otp-container" id="otpPanel" style="display:none;">
-    <h3>📧 Email 二次驗證</h3>
-    <input type="email" id="emailInput" placeholder="請輸入 Gmail">
-    <br>
-    <button id="sendOtpBtn">寄送驗證碼</button>
-    <br>
-    <input type="text" id="otpInput" placeholder="請輸入 6 位數驗證碼">
-    <br>
-    <button id="verifyOtpBtn">確認驗證並開鎖</button>
-  </div>
+  <input type="email" id="emailInput" placeholder="請輸入 Gmail">
+  <br>
 
-  <div id="videoContainer">
-    <video id="video" autoplay muted playsinline></video>
-    <canvas id="overlay"></canvas>
-  </div>
+  <button id="sendOtpBtn">寄送驗證碼</button>
 
-  <div id="chartContainer">
-    <canvas id="scoreChart"></canvas>
-  </div>
+  <br>
 
-  <div id="tableContainer">
-    <table>
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>辨識對象</th>
-          <th>相似度</th>
-          <th>結果</th>
-        </tr>
-      </thead>
-      <tbody id="resultTableBody"></tbody>
-    </table>
-  </div>
+  <input type="text" id="otpInput" placeholder="請輸入驗證碼">
 
-  <div id="status">📦 載入中...</div>
+  <br>
 
-  <script>
-    const video = document.getElementById("video");
-    const canvas = document.getElementById("overlay");
-    const ctx = canvas.getContext("2d");
-    const statusEl = document.getElementById("status");
-    const resultTableBody = document.getElementById("resultTableBody");
-    const connectBtn = document.getElementById("connectBtn");
-    const identifyBtn = document.getElementById("identifyBtn");
-    const otpPanel = document.getElementById("otpPanel");
-    const emailInput = document.getElementById("emailInput");
-    const otpInput = document.getElementById("otpInput");
-    const sendOtpBtn = document.getElementById("sendOtpBtn");
-    const verifyOtpBtn = document.getElementById("verifyOtpBtn");
-    const faceImageInput = document.getElementById("faceImageInput");
-    const newLabelInput = document.getElementById("newLabelInput");
-    const registerFaceBtn = document.getElementById("registerFaceBtn");
+  <button id="verifyOtpBtn">確認驗證並開鎖</button>
+</div>
 
-    let UARTService;
-    let knownDescriptors = [];
-    let indexCounter = 1;
-    let pendingUnlock = false;
-    let pendingMatchedLabel = "";
+<div id="videoContainer">
+  <video id="video" autoplay muted playsinline></video>
+  <canvas id="overlay"></canvas>
+</div>
 
-    const MATCH_THRESHOLD = 0.4;
-    const APPS_SCRIPT_URL = "{apps_url}";
+<div id="chartContainer">
+  <canvas id="scoreChart"></canvas>
+</div>
 
-    const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
-    const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
+<div style="max-width:700px;margin:auto;">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>辨識對象</th>
+        <th>相似度</th>
+        <th>結果</th>
+      </tr>
+    </thead>
 
-    const chart = new Chart(document.getElementById("scoreChart").getContext("2d"), {{
-      type: "line",
-      data: {{
-        labels: [],
-        datasets: [{{
-          label: "Similarity Score",
-          data: [],
-          borderColor: "blue",
-          backgroundColor: "blue",
-          pointRadius: 5,
-          fill: false,
-          tension: 0.3
-        }}]
-      }},
-      options: {{
-        responsive: true,
-        scales: {{
-          x: {{ title: {{ display: true, text: "Index" }} }},
-          y: {{ beginAtZero: true, max: 1 }}
-        }}
-      }}
-    }});
+    <tbody id="resultTableBody"></tbody>
+  </table>
+</div>
 
-    async function loadModels() {{
-      statusEl.textContent = "📦 載入模型中...";
-      await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
-      await faceapi.nets.faceLandmark68Net.loadFromUri("./models");
-      await faceapi.nets.faceRecognitionNet.loadFromUri("./models");
-      await loadReferenceFaces();
-      statusEl.textContent = "✅ 模型載入完成！";
-    }}
+<div id="status">📦 模型載入中...</div>
 
-    async function loadReferenceFaces() {{
-      const labels = ["1", "2", "3", "4"];
-      for (let label of labels) {{
-        try {{
-          const img = await faceapi.fetchImage(`./faces/${{label}}.jpg`);
-          const detection = await faceapi
-            .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({{ inputSize: 224 }}))
-            .withFaceLandmarks()
-            .withFaceDescriptor();
+<script>
 
-          if (detection) {{
-            knownDescriptors.push({{ label, descriptor: detection.descriptor }});
-          }}
-        }} catch (error) {{
-          console.warn(`無法載入參考照片 ${{label}}.jpg`, error);
-        }}
-      }}
-    }}
+const APPS_SCRIPT_URL =
+"https://script.google.com/macros/s/AKfycbzOLGC2_VfdzHhQ6gALIu0wPzriYA1iDep9GBeFo1Jx8hvi73Mhf-TzUkB-Nlwc9q1UcQ/exec";
 
-    async function startVideo() {{
-      const stream = await navigator.mediaDevices.getUserMedia({{ video: true }});
-      video.srcObject = stream;
-      video.onloadedmetadata = () => {{
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        video.play();
-        statusEl.textContent = "📷 攝影機已啟動";
-      }};
-    }}
+const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 
-    async function connectBLE() {{
-      try {{
-        const device = await navigator.bluetooth.requestDevice({{
-          acceptAllDevices: true,
-          optionalServices: [UART_SERVICE]
-        }});
+const MATCH_THRESHOLD = 0.4;
 
-        const server = await device.gatt.connect();
-        UARTService = await server.getPrimaryService(UART_SERVICE);
-        identifyBtn.disabled = false;
-        await startVideo();
-        statusEl.textContent = "✅ ESP32 已連線";
-      }} catch (error) {{
-        console.error(error);
-        statusEl.textContent = "❌ ESP32 連線失敗";
-      }}
-    }}
+const video = document.getElementById("video");
+const canvas = document.getElementById("overlay");
+const ctx = canvas.getContext("2d");
 
-    async function sendBleCommand(command) {{
-      if (!UARTService) {{
-        statusEl.textContent = "❌ 尚未連接 ESP32";
-        return;
-      }}
+const statusEl = document.getElementById("status");
+const resultTableBody = document.getElementById("resultTableBody");
 
-      const txChar = await UARTService.getCharacteristic(RX_UUID);
-      await txChar.writeValue(new TextEncoder().encode(command));
-    }}
+const connectBtn = document.getElementById("connectBtn");
+const identifyBtn = document.getElementById("identifyBtn");
 
-    async function identifyFace() {{
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      pendingUnlock = false;
-      pendingMatchedLabel = "";
+const otpPanel = document.getElementById("otpPanel");
+
+const emailInput = document.getElementById("emailInput");
+const otpInput = document.getElementById("otpInput");
+
+const sendOtpBtn = document.getElementById("sendOtpBtn");
+const verifyOtpBtn = document.getElementById("verifyOtpBtn");
+
+const registerFaceBtn = document.getElementById("registerFaceBtn");
+
+let UARTService;
+let knownDescriptors = [];
+let pendingUnlock = false;
+let pendingLabel = "";
+
+let indexCounter = 1;
+
+const chart = new Chart(
+document.getElementById("scoreChart"),
+{
+  type:"line",
+  data:{
+    labels:[],
+    datasets:[{
+      label:"Similarity Score",
+      data:[],
+      borderColor:"blue",
+      backgroundColor:"blue",
+      fill:false
+    }]
+  },
+  options:{
+    responsive:true,
+    scales:{
+      y:{
+        beginAtZero:true,
+        max:1
+      }
+    }
+  }
+});
+
+async function loadModels(){
+
+  await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
+  await faceapi.nets.faceLandmark68Net.loadFromUri("./models");
+  await faceapi.nets.faceRecognitionNet.loadFromUri("./models");
+
+  await loadReferenceFaces();
+
+  statusEl.textContent = "✅ 模型載入完成";
+}
+
+async function loadReferenceFaces(){
+
+  const labels = ["1","2","3","4"];
+
+  for(let label of labels){
+
+    try{
+
+      const img = await faceapi.fetchImage(`./faces/${label}.jpg`);
+
+      const detection =
+      await faceapi
+      .detectSingleFace(
+        img,
+        new faceapi.TinyFaceDetectorOptions()
+      )
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+      if(detection){
+
+        knownDescriptors.push({
+          label:label,
+          descriptor:detection.descriptor
+        });
+      }
+
+    }catch(err){
+
+      console.log(err);
+    }
+  }
+}
+
+async function startVideo(){
+
+  const stream =
+  await navigator.mediaDevices.getUserMedia({
+    video:true
+  });
+
+  video.srcObject = stream;
+
+  video.onloadedmetadata = ()=>{
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    statusEl.textContent = "📷 攝影機已啟動";
+  };
+}
+
+async function connectBLE(){
+
+  try{
+
+    const device =
+    await navigator.bluetooth.requestDevice({
+      acceptAllDevices:true,
+      optionalServices:[UART_SERVICE]
+    });
+
+    const server = await device.gatt.connect();
+
+    UARTService =
+    await server.getPrimaryService(UART_SERVICE);
+
+    identifyBtn.disabled = false;
+
+    await startVideo();
+
+    statusEl.textContent = "✅ ESP32 已連接";
+
+  }catch(err){
+
+    console.log(err);
+
+    statusEl.textContent = "❌ ESP32 連線失敗";
+  }
+}
+
+async function sendBLE(command){
+
+  if(!UARTService) return;
+
+  const tx =
+  await UARTService.getCharacteristic(RX_UUID);
+
+  await tx.writeValue(
+    new TextEncoder().encode(command)
+  );
+}
+
+async function identifyFace(){
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  const result =
+  await faceapi
+  .detectSingleFace(
+    video,
+    new faceapi.TinyFaceDetectorOptions()
+  )
+  .withFaceLandmarks()
+  .withFaceDescriptor();
+
+  if(!result){
+
+    statusEl.textContent = "❌ 未偵測到人臉";
+
+    return;
+  }
+
+  let bestMatch = null;
+
+  for(let item of knownDescriptors){
+
+    const dist =
+    faceapi.euclideanDistance(
+      result.descriptor,
+      item.descriptor
+    );
+
+    if(!bestMatch || dist < bestMatch.dist){
+
+      bestMatch = {
+        label:item.label,
+        dist:dist
+      };
+    }
+  }
+
+  const success =
+  bestMatch.dist < MATCH_THRESHOLD;
+
+  const resized =
+  faceapi.resizeResults(
+    result,
+    {
+      width:canvas.width,
+      height:canvas.height
+    }
+  );
+
+  const drawBox =
+  new faceapi.draw.DrawBox(
+    resized.detection.box,
+    {
+      label:`${bestMatch.label}.jpg (${bestMatch.dist.toFixed(2)})`,
+      boxColor: success ? "green":"red"
+    }
+  );
+
+  drawBox.draw(canvas);
+
+  chart.data.labels.push(indexCounter);
+  chart.data.datasets[0].data.push(bestMatch.dist);
+  chart.update();
+
+  const row = document.createElement("tr");
+
+  row.innerHTML = `
+    <td>${indexCounter}</td>
+    <td>${bestMatch.label}.jpg</td>
+    <td>${bestMatch.dist.toFixed(4)}</td>
+    <td style="color:${success ? 'green':'red'}">
+      ${success ? '待 Email 驗證':'失敗'}
+    </td>
+  `;
+
+  resultTableBody.appendChild(row);
+
+  indexCounter++;
+
+  if(success){
+
+    pendingUnlock = true;
+    pendingLabel = bestMatch.label;
+
+    otpPanel.style.display = "block";
+
+    statusEl.textContent =
+    "✅ 人臉辨識成功，請完成 Email 驗證";
+
+  }else{
+
+    await sendBLE("FAIL");
+
+    statusEl.textContent =
+    "❌ 人臉辨識失敗";
+  }
+}
+
+async function sendOTP(){
+
+  const email = emailInput.value.trim();
+
+  if(!email){
+
+    statusEl.textContent = "❌ 請輸入 Email";
+
+    return;
+  }
+
+  try{
+
+    const res =
+    await fetch(
+      `${APPS_SCRIPT_URL}?action=send&email=${encodeURIComponent(email)}`
+    );
+
+    const data = await res.json();
+
+    if(data.ok){
+
+      statusEl.textContent =
+      "✅ 驗證碼已寄出";
+
+    }else{
+
+      statusEl.textContent =
+      "❌ 寄送失敗";
+    }
+
+  }catch(err){
+
+    console.log(err);
+
+    statusEl.textContent =
+    "❌ Apps Script 錯誤";
+  }
+}
+
+async function verifyOTP(){
+
+  const email = emailInput.value.trim();
+  const otp = otpInput.value.trim();
+
+  try{
+
+    const res =
+    await fetch(
+      `${APPS_SCRIPT_URL}?action=verify&email=${encodeURIComponent(email)}&otp=${encodeURIComponent(otp)}`
+    );
+
+    const data = await res.json();
+
+    if(data.ok){
+
+      await sendBLE("UNLOCK");
+
+      statusEl.textContent =
+      "🔓 驗證成功，門鎖已開啟";
+
       otpPanel.style.display = "none";
 
-      const options = new faceapi.TinyFaceDetectorOptions({{ inputSize: 160, scoreThreshold: 0.5 }});
-      const result = await faceapi
-        .detectSingleFace(video, options)
-        .withFaceLandmarks()
-        .withFaceDescriptor();
+    }else{
 
-      if (!result) {{
-        statusEl.textContent = "😕 沒有偵測到人臉";
-        return;
-      }}
+      statusEl.textContent =
+      "❌ 驗證碼錯誤";
+    }
 
-      if (knownDescriptors.length === 0) {{
-        statusEl.textContent = "❌ 尚未載入任何人臉資料";
-        return;
-      }}
+  }catch(err){
 
-      const resized = faceapi.resizeResults(result, {{ width: canvas.width, height: canvas.height }});
-      const box = resized.detection.box;
-      const shrinkRatio = 0.8;
-      const offsetY = -box.height * 0.1;
-      const descriptor = result.descriptor;
+    console.log(err);
 
-      const results = knownDescriptors.map(item => ({{
-        label: item.label,
-        dist: faceapi.euclideanDistance(descriptor, item.descriptor)
-      }}));
+    statusEl.textContent =
+    "❌ OTP 驗證失敗";
+  }
+}
 
-      const min = results.sort((a, b) => a.dist - b.dist)[0];
-      const isMatched = min && min.dist < MATCH_THRESHOLD;
+async function registerFace(){
 
-      const drawBox = new faceapi.draw.DrawBox({{
-        x: box.x + box.width * (1 - shrinkRatio) / 2,
-        y: box.y + offsetY + box.height * (1 - shrinkRatio) / 2,
-        width: box.width * shrinkRatio,
-        height: box.height * shrinkRatio
-      }}, {{
-        label: `${{min.label}}.jpg (${{min.dist.toFixed(2)}})`,
-        boxColor: isMatched ? "green" : "red"
-      }});
+  const label =
+  document.getElementById("newLabelInput").value.trim();
 
-      drawBox.draw(canvas);
+  const file =
+  document.getElementById("faceImageInput").files[0];
 
-      chart.data.labels.push(indexCounter);
-      chart.data.datasets[0].data.push(min.dist);
-      chart.update();
+  if(!label || !file){
 
-      const newRow = document.createElement("tr");
-      newRow.innerHTML = `
-        <td>${{indexCounter}}</td>
-        <td>${{min.label}}.jpg</td>
-        <td>${{min.dist.toFixed(4)}}</td>
-        <td style="color:${{isMatched ? "green" : "red"}}">${{isMatched ? "人臉通過，待 Email 驗證" : "失敗"}}</td>
-      `;
+    statusEl.textContent =
+    "❌ 請輸入名稱並選擇照片";
 
-      resultTableBody.appendChild(newRow);
-      indexCounter++;
+    return;
+  }
 
-      if (isMatched) {{
-        pendingUnlock = true;
-        pendingMatchedLabel = min.label;
-        otpPanel.style.display = "block";
-        statusEl.textContent = `✅ 人臉辨識通過：${{min.label}}.jpg，請完成 Email 驗證`;
-      }} else {{
-        await sendBleCommand("FAIL");
-        statusEl.textContent = "❌ 人臉辨識失敗，拒絕開鎖";
-      }}
-    }}
+  const img =
+  await faceapi.bufferToImage(file);
 
-    async function sendOTP() {{
-      const email = emailInput.value.trim();
+  const detection =
+  await faceapi
+  .detectSingleFace(
+    img,
+    new faceapi.TinyFaceDetectorOptions()
+  )
+  .withFaceLandmarks()
+  .withFaceDescriptor();
 
-      if (!pendingUnlock) {{
-        statusEl.textContent = "❌ 請先完成並通過人臉辨識";
-        return;
-      }}
+  if(!detection){
 
-      if (!email) {{
-        statusEl.textContent = "❌ 請輸入 Gmail";
-        return;
-      }}
+    statusEl.textContent =
+    "❌ 無法辨識此照片";
 
-      try {{
-        statusEl.textContent = "📧 驗證碼寄送中...";
-        const url = `${{APPS_SCRIPT_URL}}?action=send&email=${{encodeURIComponent(email)}}`;
-        const res = await fetch(url);
-        const data = await res.json();
+    return;
+  }
 
-        if (data.ok) {{
-          statusEl.textContent = "✅ 驗證碼已寄出，請檢查 Gmail";
-        }} else {{
-          statusEl.textContent = `❌ 寄送失敗：${{data.message || "unknown error"}}`;
-        }}
-      }} catch (error) {{
-        console.error(error);
-        statusEl.textContent = "❌ 寄送驗證碼失敗，請確認 Apps Script 部署權限";
-      }}
-    }}
+  knownDescriptors.push({
+    label:label,
+    descriptor:detection.descriptor
+  });
 
-    async function verifyOTP() {{
-      const email = emailInput.value.trim();
-      const otp = otpInput.value.trim();
+  statusEl.textContent =
+  `✅ 已新增 ${label} 的人臉資料`;
+}
 
-      if (!pendingUnlock) {{
-        statusEl.textContent = "❌ 尚無待驗證的解鎖請求";
-        return;
-      }}
+connectBtn.onclick = connectBLE;
+identifyBtn.onclick = identifyFace;
 
-      if (!email || !otp) {{
-        statusEl.textContent = "❌ 請輸入 Gmail 與驗證碼";
-        return;
-      }}
+sendOtpBtn.onclick = sendOTP;
+verifyOtpBtn.onclick = verifyOTP;
 
-      try {{
-        statusEl.textContent = "🔍 驗證碼確認中...";
-        const url = `${{APPS_SCRIPT_URL}}?action=verify&email=${{encodeURIComponent(email)}}&otp=${{encodeURIComponent(otp)}}`;
-        const res = await fetch(url);
-        const data = await res.json();
+registerFaceBtn.onclick = registerFace;
 
-        if (data.ok) {{
-          await sendBleCommand("UNLOCK");
-          statusEl.textContent = `🔓 Email 驗證成功，已為 ${{pendingMatchedLabel}}.jpg 開鎖`;
-          pendingUnlock = false;
-          otpPanel.style.display = "none";
-          otpInput.value = "";
-        }} else {{
-          await sendBleCommand("FAIL");
-          statusEl.textContent = `❌ 驗證失敗：${{data.message || "驗證碼錯誤"}}`;
-        }}
-      }} catch (error) {{
-        console.error(error);
-        statusEl.textContent = "❌ 驗證失敗，請確認 Apps Script URL";
-      }}
-    }}
+loadModels();
 
-    async function registerFaceFromUpload() {{
-      const label = newLabelInput.value.trim();
-      const file = faceImageInput.files[0];
+</script>
 
-      if (!label) {{
-        statusEl.textContent = "❌ 請輸入使用者編號";
-        return;
-      }}
-
-      if (!file) {{
-        statusEl.textContent = "❌ 請選擇一張人臉照片";
-        return;
-      }}
-
-      try {{
-        const img = await faceapi.bufferToImage(file);
-        const detection = await faceapi
-          .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({{ inputSize: 224 }}))
-          .withFaceLandmarks()
-          .withFaceDescriptor();
-
-        if (!detection) {{
-          statusEl.textContent = "❌ 上傳照片未偵測到人臉";
-          return;
-        }}
-
-        const existingIndex = knownDescriptors.findIndex(item => item.label === label);
-
-        if (existingIndex >= 0) {{
-          knownDescriptors[existingIndex] = {{ label, descriptor: detection.descriptor }};
-        }} else {{
-          knownDescriptors.push({{ label, descriptor: detection.descriptor }});
-        }}
-
-        statusEl.textContent = `✅ 已新增 ${{label}}.jpg 的臉部資料（本次頁面暫存）`;
-      }} catch (error) {{
-        console.error(error);
-        statusEl.textContent = "❌ 新增臉部資料失敗";
-      }}
-    }}
-
-    connectBtn.onclick = connectBLE;
-    identifyBtn.onclick = identifyFace;
-    sendOtpBtn.onclick = sendOTP;
-    verifyOtpBtn.onclick = verifyOTP;
-    registerFaceBtn.onclick = registerFaceFromUpload;
-
-    loadModels();
-  </script>
 </body>
 </html>
-"""
-
-Path("/mnt/data/index_final_email_otp.html").write_text(html, encoding="utf-8")
-print("/mnt/data/index_final_email_otp.html")
