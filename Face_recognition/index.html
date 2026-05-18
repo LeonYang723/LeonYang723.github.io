@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+html = r'''<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
@@ -9,98 +9,108 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <style>
-    body{
+    body {
       font-family: Arial, sans-serif;
-      background:#f2f2f2;
-      text-align:center;
-      padding:20px;
+      background: #f2f2f2;
+      text-align: center;
+      padding: 20px;
     }
 
-    h2{
-      margin-bottom:20px;
+    h2 {
+      margin-bottom: 20px;
     }
 
-    button{
-      padding:10px 18px;
-      border:none;
-      border-radius:10px;
-      background:#007bff;
-      color:white;
-      font-size:16px;
-      cursor:pointer;
-      margin:5px;
+    button {
+      padding: 10px 18px;
+      border: none;
+      border-radius: 10px;
+      background: #007bff;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+      margin: 5px;
     }
 
-    button:disabled{
-      background:#999;
+    button:disabled {
+      background: #999;
+      cursor: not-allowed;
     }
 
-    input{
-      padding:10px;
-      border-radius:8px;
-      border:1px solid #ccc;
-      margin:5px;
-      width:250px;
-      max-width:90%;
+    input {
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      margin: 5px;
+      width: 250px;
+      max-width: 90%;
+      font-size: 15px;
     }
 
-    .panel{
-      background:white;
-      padding:20px;
-      border-radius:15px;
-      max-width:400px;
-      margin:20px auto;
-      box-shadow:0 2px 8px rgba(0,0,0,0.1);
+    .panel {
+      background: white;
+      padding: 20px;
+      border-radius: 15px;
+      max-width: 420px;
+      margin: 20px auto;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
 
-    #videoContainer{
-      position:relative;
-      width:360px;
-      max-width:95%;
-      margin:auto;
-      background:black;
-      border-radius:10px;
-      overflow:hidden;
+    #videoContainer {
+      position: relative;
+      width: 360px;
+      max-width: 95%;
+      margin: auto;
+      background: black;
+      border-radius: 10px;
+      overflow: hidden;
     }
 
-    video, canvas{
-      width:100%;
+    video, canvas {
+      width: 100%;
     }
 
-    canvas{
-      position:absolute;
-      top:0;
-      left:0;
+    canvas#overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
     }
 
-    #status{
-      margin-top:15px;
-      color:#555;
-      font-size:14px;
+    #status {
+      margin-top: 15px;
+      color: #555;
+      font-size: 14px;
+      line-height: 1.5;
     }
 
-    table{
-      width:100%;
-      border-collapse:collapse;
-      margin-top:20px;
-      background:white;
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      background: white;
     }
 
-    th, td{
-      border:1px solid #ddd;
-      padding:8px;
-      font-size:14px;
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      font-size: 14px;
     }
 
-    th{
-      background:#007bff;
-      color:white;
+    th {
+      background: #007bff;
+      color: white;
     }
 
-    #chartContainer{
-      width:360px;
-      max-width:95%;
-      margin:30px auto;
+    #chartContainer {
+      width: 360px;
+      max-width: 95%;
+      margin: 30px auto;
+    }
+
+    .note {
+      font-size: 13px;
+      color: #666;
+      margin-top: 10px;
+      line-height: 1.5;
     }
   </style>
 </head>
@@ -115,16 +125,18 @@
 <div class="panel">
   <h3>📸 使用者臉部資料註冊</h3>
 
-  <input type="text" id="newLabelInput" placeholder="請輸入使用者名稱">
+  <input type="text" id="newLabelInput" placeholder="請輸入使用者名稱，例如 Leon">
   <br>
 
   <input type="file" id="faceImageInput" accept="image/*">
   <br>
 
   <button id="registerFaceBtn">新增臉部資料</button>
+  <button id="clearLocalFacesBtn" style="background:#dc3545;">清除暫存臉部資料</button>
 
-  <div style="font-size:13px;color:#666;margin-top:10px;">
-    本功能僅暫存於目前瀏覽器，不會直接寫入 GitHub
+  <div class="note">
+    本功能會將上傳照片轉成 128 維向量，並暫存在目前瀏覽器 localStorage。<br>
+    重新開啟網頁仍可使用，但不會直接寫入 GitHub。
   </div>
 </div>
 
@@ -138,7 +150,7 @@
 
   <br>
 
-  <input type="text" id="otpInput" placeholder="請輸入驗證碼">
+  <input type="text" id="otpInput" placeholder="請輸入 6 位數驗證碼">
 
   <br>
 
@@ -172,7 +184,6 @@
 <div id="status">📦 模型載入中...</div>
 
 <script>
-
 const APPS_SCRIPT_URL =
 "https://script.google.com/macros/s/AKfycbzOLGC2_VfdzHhQ6gALIu0wPzriYA1iDep9GBeFo1Jx8hvi73Mhf-TzUkB-Nlwc9q1UcQ/exec";
 
@@ -200,116 +211,146 @@ const sendOtpBtn = document.getElementById("sendOtpBtn");
 const verifyOtpBtn = document.getElementById("verifyOtpBtn");
 
 const registerFaceBtn = document.getElementById("registerFaceBtn");
+const clearLocalFacesBtn = document.getElementById("clearLocalFacesBtn");
 
 let UARTService;
 let knownDescriptors = [];
 let pendingUnlock = false;
 let pendingLabel = "";
-
 let indexCounter = 1;
 
 const chart = new Chart(
-document.getElementById("scoreChart"),
-{
-  type:"line",
-  data:{
-    labels:[],
-    datasets:[{
-      label:"Similarity Score",
-      data:[],
-      borderColor:"blue",
-      backgroundColor:"blue",
-      fill:false
-    }]
-  },
-  options:{
-    responsive:true,
-    scales:{
-      y:{
-        beginAtZero:true,
-        max:1
+  document.getElementById("scoreChart"),
+  {
+    type: "line",
+    data: {
+      labels: [],
+      datasets: [{
+        label: "Similarity Score",
+        data: [],
+        borderColor: "blue",
+        backgroundColor: "blue",
+        fill: false,
+        pointRadius: 5,
+        tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        x: {
+          title: { display: true, text: "Index" }
+        },
+        y: {
+          beginAtZero: true,
+          max: 1
+        }
       }
     }
   }
-});
+);
 
-async function loadModels(){
+async function loadModels() {
+  try {
+    statusEl.textContent = "📦 載入模型中...";
 
-  await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
-  await faceapi.nets.faceLandmark68Net.loadFromUri("./models");
-  await faceapi.nets.faceRecognitionNet.loadFromUri("./models");
+    await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
+    await faceapi.nets.faceLandmark68Net.loadFromUri("./models");
+    await faceapi.nets.faceRecognitionNet.loadFromUri("./models");
 
-  await loadReferenceFaces();
+    await loadReferenceFaces();
+    loadLocalRegisteredFaces();
 
-  statusEl.textContent = "✅ 模型載入完成";
+    statusEl.textContent =
+      `✅ 模型載入完成，目前共 ${knownDescriptors.length} 筆臉部資料`;
+  } catch (error) {
+    console.error(error);
+    statusEl.textContent = "❌ 模型載入失敗，請確認 models 路徑";
+  }
 }
 
-async function loadReferenceFaces(){
+async function loadReferenceFaces() {
+  const labels = ["1", "2", "3", "4"];
 
-  const labels = ["1","2","3","4"];
-
-  for(let label of labels){
-
-    try{
-
+  for (let label of labels) {
+    try {
       const img = await faceapi.fetchImage(`./faces/${label}.jpg`);
 
       const detection =
-      await faceapi
-      .detectSingleFace(
-        img,
-        new faceapi.TinyFaceDetectorOptions()
-      )
-      .withFaceLandmarks()
-      .withFaceDescriptor();
+        await faceapi
+        .detectSingleFace(
+          img,
+          new faceapi.TinyFaceDetectorOptions({
+            inputSize: 224,
+            scoreThreshold: 0.3
+          })
+        )
+        .withFaceLandmarks()
+        .withFaceDescriptor();
 
-      if(detection){
-
+      if (detection) {
         knownDescriptors.push({
-          label:label,
-          descriptor:detection.descriptor
+          label: label,
+          descriptor: detection.descriptor,
+          source: "github"
         });
       }
 
-    }catch(err){
-
-      console.log(err);
+    } catch (err) {
+      console.warn(`無法載入參考照片 ${label}.jpg`, err);
     }
   }
 }
 
-async function startVideo(){
+function loadLocalRegisteredFaces() {
+  try {
+    const savedFaces =
+      JSON.parse(localStorage.getItem("registeredFaces") || "[]");
 
+    savedFaces.forEach(face => {
+      knownDescriptors.push({
+        label: face.label,
+        descriptor: new Float32Array(face.descriptor),
+        source: "localStorage"
+      });
+    });
+
+  } catch (error) {
+    console.error(error);
+    localStorage.removeItem("registeredFaces");
+  }
+}
+
+async function startVideo() {
   const stream =
-  await navigator.mediaDevices.getUserMedia({
-    video:true
-  });
+    await navigator.mediaDevices.getUserMedia({
+      video: true
+    });
 
   video.srcObject = stream;
 
-  video.onloadedmetadata = ()=>{
-
+  video.onloadedmetadata = () => {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
+
+    video.play();
 
     statusEl.textContent = "📷 攝影機已啟動";
   };
 }
 
-async function connectBLE(){
-
-  try{
-
+async function connectBLE() {
+  try {
     const device =
-    await navigator.bluetooth.requestDevice({
-      acceptAllDevices:true,
-      optionalServices:[UART_SERVICE]
-    });
+      await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [UART_SERVICE]
+      });
 
     const server = await device.gatt.connect();
 
     UARTService =
-    await server.getPrimaryService(UART_SERVICE);
+      await server.getPrimaryService(UART_SERVICE);
 
     identifyBtn.disabled = false;
 
@@ -317,85 +358,98 @@ async function connectBLE(){
 
     statusEl.textContent = "✅ ESP32 已連接";
 
-  }catch(err){
-
-    console.log(err);
-
+  } catch (err) {
+    console.error(err);
     statusEl.textContent = "❌ ESP32 連線失敗";
   }
 }
 
-async function sendBLE(command){
-
-  if(!UARTService) return;
+async function sendBLE(command) {
+  if (!UARTService) {
+    statusEl.textContent = "❌ 尚未連接 ESP32";
+    return;
+  }
 
   const tx =
-  await UARTService.getCharacteristic(RX_UUID);
+    await UARTService.getCharacteristic(RX_UUID);
 
   await tx.writeValue(
     new TextEncoder().encode(command)
   );
 }
 
-async function identifyFace(){
-
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+async function identifyFace() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  pendingUnlock = false;
+  pendingLabel = "";
+  otpPanel.style.display = "none";
 
   const result =
-  await faceapi
-  .detectSingleFace(
-    video,
-    new faceapi.TinyFaceDetectorOptions()
-  )
-  .withFaceLandmarks()
-  .withFaceDescriptor();
+    await faceapi
+    .detectSingleFace(
+      video,
+      new faceapi.TinyFaceDetectorOptions({
+        inputSize: 160,
+        scoreThreshold: 0.5
+      })
+    )
+    .withFaceLandmarks()
+    .withFaceDescriptor();
 
-  if(!result){
-
+  if (!result) {
     statusEl.textContent = "❌ 未偵測到人臉";
+    return;
+  }
 
+  if (knownDescriptors.length === 0) {
+    statusEl.textContent = "❌ 尚未載入任何臉部資料";
     return;
   }
 
   let bestMatch = null;
 
-  for(let item of knownDescriptors){
-
+  for (let item of knownDescriptors) {
     const dist =
-    faceapi.euclideanDistance(
-      result.descriptor,
-      item.descriptor
-    );
+      faceapi.euclideanDistance(
+        result.descriptor,
+        item.descriptor
+      );
 
-    if(!bestMatch || dist < bestMatch.dist){
-
+    if (!bestMatch || dist < bestMatch.dist) {
       bestMatch = {
-        label:item.label,
-        dist:dist
+        label: item.label,
+        dist: dist
       };
     }
   }
 
   const success =
-  bestMatch.dist < MATCH_THRESHOLD;
+    bestMatch.dist < MATCH_THRESHOLD;
 
   const resized =
-  faceapi.resizeResults(
-    result,
-    {
-      width:canvas.width,
-      height:canvas.height
-    }
-  );
+    faceapi.resizeResults(
+      result,
+      {
+        width: canvas.width,
+        height: canvas.height
+      }
+    );
+
+  const box = resized.detection.box;
 
   const drawBox =
-  new faceapi.draw.DrawBox(
-    resized.detection.box,
-    {
-      label:`${bestMatch.label}.jpg (${bestMatch.dist.toFixed(2)})`,
-      boxColor: success ? "green":"red"
-    }
-  );
+    new faceapi.draw.DrawBox(
+      {
+        x: box.x,
+        y: box.y,
+        width: box.width,
+        height: box.height
+      },
+      {
+        label: `${bestMatch.label}.jpg (${bestMatch.dist.toFixed(2)})`,
+        boxColor: success ? "green" : "red"
+      }
+    );
 
   drawBox.draw(canvas);
 
@@ -415,149 +469,189 @@ async function identifyFace(){
   `;
 
   resultTableBody.appendChild(row);
-
   indexCounter++;
 
-  if(success){
-
+  if (success) {
     pendingUnlock = true;
     pendingLabel = bestMatch.label;
 
     otpPanel.style.display = "block";
 
     statusEl.textContent =
-    "✅ 人臉辨識成功，請完成 Email 驗證";
-
-  }else{
-
+      `✅ 人臉辨識成功：${bestMatch.label}.jpg，請完成 Email 驗證`;
+  } else {
     await sendBLE("FAIL");
-
-    statusEl.textContent =
-    "❌ 人臉辨識失敗";
+    statusEl.textContent = "❌ 人臉辨識失敗";
   }
 }
 
-async function sendOTP(){
-
+async function sendOTP() {
   const email = emailInput.value.trim();
 
-  if(!email){
-
-    statusEl.textContent = "❌ 請輸入 Email";
-
+  if (!pendingUnlock) {
+    statusEl.textContent = "❌ 請先通過人臉辨識";
     return;
   }
 
-  try{
+  if (!email) {
+    statusEl.textContent = "❌ 請輸入 Email";
+    return;
+  }
+
+  try {
+    statusEl.textContent = "📧 驗證碼寄送中...";
 
     const res =
-    await fetch(
-      `${APPS_SCRIPT_URL}?action=send&email=${encodeURIComponent(email)}`
-    );
+      await fetch(
+        `${APPS_SCRIPT_URL}?action=send&email=${encodeURIComponent(email)}`
+      );
 
     const data = await res.json();
 
-    if(data.ok){
-
+    if (data.ok) {
+      statusEl.textContent = "✅ 驗證碼已寄出，請檢查 Gmail";
+    } else {
       statusEl.textContent =
-      "✅ 驗證碼已寄出";
-
-    }else{
-
-      statusEl.textContent =
-      "❌ 寄送失敗";
+        `❌ 寄送失敗：${data.message || "Unknown error"}`;
     }
 
-  }catch(err){
-
-    console.log(err);
-
-    statusEl.textContent =
-    "❌ Apps Script 錯誤";
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = "❌ Apps Script 錯誤，請確認部署權限";
   }
 }
 
-async function verifyOTP(){
-
+async function verifyOTP() {
   const email = emailInput.value.trim();
   const otp = otpInput.value.trim();
 
-  try{
+  if (!pendingUnlock) {
+    statusEl.textContent = "❌ 尚無待驗證的解鎖請求";
+    return;
+  }
+
+  if (!email || !otp) {
+    statusEl.textContent = "❌ 請輸入 Email 與驗證碼";
+    return;
+  }
+
+  try {
+    statusEl.textContent = "🔍 驗證碼確認中...";
 
     const res =
-    await fetch(
-      `${APPS_SCRIPT_URL}?action=verify&email=${encodeURIComponent(email)}&otp=${encodeURIComponent(otp)}`
-    );
+      await fetch(
+        `${APPS_SCRIPT_URL}?action=verify&email=${encodeURIComponent(email)}&otp=${encodeURIComponent(otp)}`
+      );
 
     const data = await res.json();
 
-    if(data.ok){
-
+    if (data.ok) {
       await sendBLE("UNLOCK");
 
       statusEl.textContent =
-      "🔓 驗證成功，門鎖已開啟";
+        `🔓 Email 驗證成功，${pendingLabel}.jpg 已開鎖`;
 
+      pendingUnlock = false;
       otpPanel.style.display = "none";
-
-    }else{
+      otpInput.value = "";
+    } else {
+      await sendBLE("FAIL");
 
       statusEl.textContent =
-      "❌ 驗證碼錯誤";
+        `❌ 驗證失敗：${data.message || "驗證碼錯誤"}`;
     }
 
-  }catch(err){
-
-    console.log(err);
-
-    statusEl.textContent =
-    "❌ OTP 驗證失敗";
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = "❌ OTP 驗證失敗，請確認 Apps Script URL";
   }
 }
 
-async function registerFace(){
-
+async function registerFace() {
   const label =
-  document.getElementById("newLabelInput").value.trim();
+    document.getElementById("newLabelInput").value.trim();
 
   const file =
-  document.getElementById("faceImageInput").files[0];
+    document.getElementById("faceImageInput").files[0];
 
-  if(!label || !file){
-
-    statusEl.textContent =
-    "❌ 請輸入名稱並選擇照片";
-
+  if (!label || !file) {
+    alert("請輸入名稱並選擇照片");
+    statusEl.textContent = "❌ 請輸入名稱並選擇照片";
     return;
   }
 
-  const img =
-  await faceapi.bufferToImage(file);
+  statusEl.textContent = "📸 正在讀取照片並擷取人臉特徵...";
 
-  const detection =
-  await faceapi
-  .detectSingleFace(
-    img,
-    new faceapi.TinyFaceDetectorOptions()
-  )
-  .withFaceLandmarks()
-  .withFaceDescriptor();
+  try {
+    const img = await faceapi.bufferToImage(file);
 
-  if(!detection){
+    const detection =
+      await faceapi
+      .detectSingleFace(
+        img,
+        new faceapi.TinyFaceDetectorOptions({
+          inputSize: 224,
+          scoreThreshold: 0.3
+        })
+      )
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+    if (!detection) {
+      alert("這張照片沒有偵測到人臉，請換一張清楚正臉照片");
+      statusEl.textContent = "❌ 上傳照片未偵測到人臉";
+      return;
+    }
+
+    const descriptorArray =
+      Array.from(detection.descriptor);
+
+    knownDescriptors.push({
+      label: label,
+      descriptor: new Float32Array(descriptorArray),
+      source: "localStorage"
+    });
+
+    let savedFaces =
+      JSON.parse(localStorage.getItem("registeredFaces") || "[]");
+
+    savedFaces = savedFaces.filter(face => face.label !== label);
+
+    savedFaces.push({
+      label: label,
+      descriptor: descriptorArray
+    });
+
+    localStorage.setItem(
+      "registeredFaces",
+      JSON.stringify(savedFaces)
+    );
+
+    alert("新增成功：" + label);
 
     statusEl.textContent =
-    "❌ 無法辨識此照片";
+      `✅ 已新增 ${label} 的臉部資料，並暫存於瀏覽器。總資料數：${knownDescriptors.length}`;
 
-    return;
+  } catch (error) {
+    console.error(error);
+    alert("新增失敗，請確認照片是否清楚");
+    statusEl.textContent = "❌ 新增臉部資料失敗";
   }
+}
 
-  knownDescriptors.push({
-    label:label,
-    descriptor:detection.descriptor
-  });
+function clearLocalFaces() {
+  const confirmClear =
+    confirm("確定要清除本機暫存的臉部資料嗎？GitHub 原始照片不會被刪除。");
+
+  if (!confirmClear) return;
+
+  localStorage.removeItem("registeredFaces");
+
+  knownDescriptors =
+    knownDescriptors.filter(item => item.source !== "localStorage");
 
   statusEl.textContent =
-  `✅ 已新增 ${label} 的人臉資料`;
+    `🗑️ 已清除本機暫存資料，目前剩餘 ${knownDescriptors.length} 筆 GitHub 臉部資料`;
 }
 
 connectBtn.onclick = connectBLE;
@@ -567,10 +661,14 @@ sendOtpBtn.onclick = sendOTP;
 verifyOtpBtn.onclick = verifyOTP;
 
 registerFaceBtn.onclick = registerFace;
+clearLocalFacesBtn.onclick = clearLocalFaces;
 
 loadModels();
-
 </script>
 
 </body>
 </html>
+'''
+
+Path("/mnt/data/index_final_localstorage_otp.html").write_text(html, encoding="utf-8")
+print("/mnt/data/index_final_localstorage_otp.html")
