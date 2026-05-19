@@ -1,4 +1,4 @@
-html = r'''<!DOCTYPE html>
+frontend = r'''<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
@@ -13,11 +13,11 @@ html = r'''<!DOCTYPE html>
       font-family: Arial, sans-serif;
       background: #f2f2f2;
       text-align: center;
-      padding: 20px;
+      padding: 16px;
     }
 
-    h2 {
-      margin-bottom: 20px;
+    h2, h3 {
+      margin-bottom: 12px;
     }
 
     button {
@@ -41,18 +41,48 @@ html = r'''<!DOCTYPE html>
       border-radius: 8px;
       border: 1px solid #ccc;
       margin: 5px;
-      width: 250px;
+      width: 260px;
       max-width: 90%;
       font-size: 15px;
     }
 
     .panel {
       background: white;
-      padding: 20px;
+      padding: 18px;
       border-radius: 15px;
-      max-width: 420px;
-      margin: 20px auto;
+      max-width: 430px;
+      margin: 14px auto;
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .note {
+      font-size: 13px;
+      color: #666;
+      margin-top: 10px;
+      line-height: 1.5;
+    }
+
+    .step-label {
+      display: inline-block;
+      background: #007bff;
+      color: white;
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    #mainSystem {
+      display: none;
+    }
+
+    .sticky-buttons {
+      position: sticky;
+      top: 0;
+      z-index: 999;
+      background: #f2f2f2;
+      padding: 8px 0;
+      margin-bottom: 10px;
     }
 
     #videoContainer {
@@ -80,6 +110,7 @@ html = r'''<!DOCTYPE html>
       color: #555;
       font-size: 14px;
       line-height: 1.5;
+      white-space: pre-line;
     }
 
     table {
@@ -105,85 +136,107 @@ html = r'''<!DOCTYPE html>
       max-width: 95%;
       margin: 30px auto;
     }
-
-    .note {
-      font-size: 13px;
-      color: #666;
-      margin-top: 10px;
-      line-height: 1.5;
-    }
   </style>
 </head>
 
 <body>
 
-<h2>🔐 臉部辨識門鎖</h2>
+<h2>🔐 臉部辨識智慧門鎖</h2>
 
-<button id="connectBtn">🔗 連接 ESP32</button>
-<button id="identifyBtn" disabled>🧠 開始辨識</button>
-
-<div class="panel">
+<!-- Step 1: Registration -->
+<div id="registerStep" class="panel">
+  <div class="step-label">Step 1 註冊資料</div>
   <h3>📸 使用者臉部資料註冊</h3>
 
-  <input type="text" id="newLabelInput" placeholder="請輸入使用者名稱，例如 Leon">
+  <input type="text" id="registerNameInput" placeholder="請輸入姓名，例如 Leon">
   <br>
 
-  <input type="file" id="faceImageInput" accept="image/*">
+  <input type="email" id="registerEmailInput" placeholder="請輸入 Gmail">
   <br>
 
-  <button id="registerFaceBtn">新增臉部資料</button>
-  <button id="clearLocalFacesBtn" style="background:#dc3545;">清除暫存臉部資料</button>
+  <input type="file" id="registerFaceInput" accept="image/*">
+  <br>
+
+  <button id="submitRegisterBtn">送出註冊資料</button>
+  <button id="skipRegisterBtn" style="background:#6c757d;">略過註冊，直接進入辨識</button>
 
   <div class="note">
-    本功能會將上傳照片轉成 128 維向量，並暫存在目前瀏覽器 localStorage。<br>
-    重新開啟網頁仍可使用，但不會直接寫入 GitHub。
+    註冊後會將姓名、Email 與 128 維臉部特徵向量寫入 Google Sheet，並同步暫存於瀏覽器。<br>
+    建議正式使用時搭配 Google Sheet 的 approved 狀態欄位，由管理者審核後才允許開鎖。
   </div>
 </div>
 
-<div class="panel" id="otpPanel" style="display:none;">
-  <h3>📧 Email 二次驗證</h3>
+<!-- Step 2: Face recognition + BLE + OTP -->
+<div id="mainSystem">
+  <div class="panel">
+    <div class="step-label">Step 2 人臉辨識與開鎖</div>
+    <h3>🧠 人臉辨識系統</h3>
+    <div class="note">
+      請先連接 ESP32，再開始辨識。辨識成功後，系統會要求 Email OTP 二次驗證。
+    </div>
+  </div>
 
-  <input type="email" id="emailInput" placeholder="請輸入 Gmail">
-  <br>
+  <div class="sticky-buttons">
+    <button id="connectBtn">🔗 連接 ESP32</button>
+    <button id="identifyBtn" disabled>🧠 開始辨識</button>
+  </div>
 
-  <button id="sendOtpBtn">寄送驗證碼</button>
+  <div class="panel" id="otpPanel" style="display:none;">
+    <h3>📧 Email 二次驗證</h3>
 
-  <br>
+    <input type="email" id="emailInput" placeholder="請輸入註冊 Gmail">
+    <br>
 
-  <input type="text" id="otpInput" placeholder="請輸入 6 位數驗證碼">
+    <button id="sendOtpBtn">寄送驗證碼</button>
 
-  <br>
+    <br>
 
-  <button id="verifyOtpBtn">確認驗證並開鎖</button>
-</div>
+    <input type="text" id="otpInput" placeholder="請輸入 6 位數驗證碼">
 
-<div id="videoContainer">
-  <video id="video" autoplay muted playsinline></video>
-  <canvas id="overlay"></canvas>
-</div>
+    <br>
 
-<div id="chartContainer">
-  <canvas id="scoreChart"></canvas>
-</div>
+    <button id="verifyOtpBtn">確認驗證並開鎖</button>
 
-<div style="max-width:700px;margin:auto;">
-  <table>
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>辨識對象</th>
-        <th>相似度</th>
-        <th>結果</th>
-      </tr>
-    </thead>
+    <div class="note">
+      系統會確認此 Email 是否與辨識到的人臉資料相符，再寄送驗證碼。
+    </div>
+  </div>
 
-    <tbody id="resultTableBody"></tbody>
-  </table>
+  <div id="videoContainer">
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="overlay"></canvas>
+  </div>
+
+  <div id="chartContainer">
+    <canvas id="scoreChart"></canvas>
+  </div>
+
+  <div style="max-width:700px;margin:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>辨識對象</th>
+          <th>相似度</th>
+          <th>結果</th>
+        </tr>
+      </thead>
+
+      <tbody id="resultTableBody"></tbody>
+    </table>
+  </div>
 </div>
 
 <div id="status">📦 模型載入中...</div>
 
 <script>
+/*
+  重要：
+  1. APPS_SCRIPT_URL 請替換成你部署後的 Google Apps Script Web App URL。
+  2. Google Sheet 需建立欄位：
+     Time | Name | Email | Descriptor | Status
+  3. Apps Script 後端需使用我提供的整合版程式碼。
+*/
 const APPS_SCRIPT_URL =
 "https://script.google.com/macros/s/AKfycbzOLGC2_VfdzHhQ6gALIu0wPzriYA1iDep9GBeFo1Jx8hvi73Mhf-TzUkB-Nlwc9q1UcQ/exec";
 
@@ -199,24 +252,29 @@ const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
 const resultTableBody = document.getElementById("resultTableBody");
 
+const registerStep = document.getElementById("registerStep");
+const mainSystem = document.getElementById("mainSystem");
+
+const registerNameInput = document.getElementById("registerNameInput");
+const registerEmailInput = document.getElementById("registerEmailInput");
+const registerFaceInput = document.getElementById("registerFaceInput");
+const submitRegisterBtn = document.getElementById("submitRegisterBtn");
+const skipRegisterBtn = document.getElementById("skipRegisterBtn");
+
 const connectBtn = document.getElementById("connectBtn");
 const identifyBtn = document.getElementById("identifyBtn");
 
 const otpPanel = document.getElementById("otpPanel");
-
 const emailInput = document.getElementById("emailInput");
 const otpInput = document.getElementById("otpInput");
-
 const sendOtpBtn = document.getElementById("sendOtpBtn");
 const verifyOtpBtn = document.getElementById("verifyOtpBtn");
-
-const registerFaceBtn = document.getElementById("registerFaceBtn");
-const clearLocalFacesBtn = document.getElementById("clearLocalFacesBtn");
 
 let UARTService;
 let knownDescriptors = [];
 let pendingUnlock = false;
 let pendingLabel = "";
+let pendingEmail = "";
 let indexCounter = 1;
 
 const chart = new Chart(
@@ -238,13 +296,8 @@ const chart = new Chart(
     options: {
       responsive: true,
       scales: {
-        x: {
-          title: { display: true, text: "Index" }
-        },
-        y: {
-          beginAtZero: true,
-          max: 1
-        }
+        x: { title: { display: true, text: "Index" } },
+        y: { beginAtZero: true, max: 1 }
       }
     }
   }
@@ -291,11 +344,11 @@ async function loadReferenceFaces() {
       if (detection) {
         knownDescriptors.push({
           label: label,
+          email: "",
           descriptor: detection.descriptor,
           source: "github"
         });
       }
-
     } catch (err) {
       console.warn(`無法載入參考照片 ${label}.jpg`, err);
     }
@@ -304,20 +357,129 @@ async function loadReferenceFaces() {
 
 function loadLocalRegisteredFaces() {
   try {
-    const savedFaces =
-      JSON.parse(localStorage.getItem("registeredFaces") || "[]");
+    const savedUsers =
+      JSON.parse(localStorage.getItem("registeredUsers") || "[]");
 
-    savedFaces.forEach(face => {
+    savedUsers.forEach(user => {
       knownDescriptors.push({
-        label: face.label,
-        descriptor: new Float32Array(face.descriptor),
+        label: user.name,
+        email: user.email,
+        descriptor: new Float32Array(user.descriptor),
         source: "localStorage"
       });
     });
+  } catch (error) {
+    console.error(error);
+    localStorage.removeItem("registeredUsers");
+  }
+}
+
+function goToMainSystem() {
+  registerStep.style.display = "none";
+  mainSystem.style.display = "block";
+  statusEl.textContent =
+    `✅ 已進入辨識頁面，目前共 ${knownDescriptors.length} 筆臉部資料`;
+}
+
+async function submitRegistration() {
+  const name = registerNameInput.value.trim();
+  const email = registerEmailInput.value.trim().toLowerCase();
+  const file = registerFaceInput.files[0];
+
+  if (!name || !email || !file) {
+    alert("請輸入姓名、Gmail，並選擇一張人臉照片");
+    statusEl.textContent = "❌ 註冊資料不完整";
+    return;
+  }
+
+  statusEl.textContent = "📸 正在讀取照片並擷取 128 維臉部特徵...";
+
+  try {
+    const img = await faceapi.bufferToImage(file);
+
+    const detection =
+      await faceapi
+      .detectSingleFace(
+        img,
+        new faceapi.TinyFaceDetectorOptions({
+          inputSize: 224,
+          scoreThreshold: 0.3
+        })
+      )
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+    if (!detection) {
+      alert("這張照片未偵測到人臉，請換一張清楚正臉照片");
+      statusEl.textContent = "❌ 上傳照片未偵測到人臉";
+      return;
+    }
+
+    const descriptorArray = Array.from(detection.descriptor);
+
+    // 1. 存到 localStorage，供本機辨識使用
+    let savedUsers =
+      JSON.parse(localStorage.getItem("registeredUsers") || "[]");
+
+    savedUsers = savedUsers.filter(user => user.email !== email);
+
+    savedUsers.push({
+      name: name,
+      email: email,
+      descriptor: descriptorArray
+    });
+
+    localStorage.setItem(
+      "registeredUsers",
+      JSON.stringify(savedUsers)
+    );
+
+    // 同步更新目前頁面的 knownDescriptors
+    knownDescriptors = knownDescriptors.filter(
+      item => !(item.source === "localStorage" && item.email === email)
+    );
+
+    knownDescriptors.push({
+      label: name,
+      email: email,
+      descriptor: new Float32Array(descriptorArray),
+      source: "localStorage"
+    });
+
+    // 2. 寫入 Google Sheet
+    statusEl.textContent = "☁️ 正在寫入 Google Sheet...";
+
+    const params = new URLSearchParams();
+    params.append("action", "register");
+    params.append("name", name);
+    params.append("email", email);
+    params.append("descriptor", JSON.stringify(descriptorArray));
+
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      body: params
+    });
+
+    const data = await res.json();
+
+    if (!data.ok) {
+      alert("本機註冊成功，但 Google Sheet 寫入失敗：" + (data.message || "unknown error"));
+      statusEl.textContent =
+        `⚠️ 本機註冊成功，但雲端寫入失敗：${data.message || "unknown error"}`;
+      goToMainSystem();
+      return;
+    }
+
+    alert("註冊成功，資料已寫入 Google Sheet");
+    statusEl.textContent =
+      `✅ 註冊成功：${name} / ${email}\n已寫入 Google Sheet，並暫存於瀏覽器`;
+
+    goToMainSystem();
 
   } catch (error) {
     console.error(error);
-    localStorage.removeItem("registeredFaces");
+    alert("註冊失敗，請確認照片或 Apps Script 設定");
+    statusEl.textContent = "❌ 註冊失敗";
   }
 }
 
@@ -332,9 +494,7 @@ async function startVideo() {
   video.onloadedmetadata = () => {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-
     video.play();
-
     statusEl.textContent = "📷 攝影機已啟動";
   };
 }
@@ -382,6 +542,7 @@ async function identifyFace() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   pendingUnlock = false;
   pendingLabel = "";
+  pendingEmail = "";
   otpPanel.style.display = "none";
 
   const result =
@@ -418,6 +579,7 @@ async function identifyFace() {
     if (!bestMatch || dist < bestMatch.dist) {
       bestMatch = {
         label: item.label,
+        email: item.email,
         dist: dist
       };
     }
@@ -446,7 +608,7 @@ async function identifyFace() {
         height: box.height
       },
       {
-        label: `${bestMatch.label}.jpg (${bestMatch.dist.toFixed(2)})`,
+        label: `${bestMatch.label} (${bestMatch.dist.toFixed(2)})`,
         boxColor: success ? "green" : "red"
       }
     );
@@ -461,7 +623,7 @@ async function identifyFace() {
 
   row.innerHTML = `
     <td>${indexCounter}</td>
-    <td>${bestMatch.label}.jpg</td>
+    <td>${bestMatch.label}</td>
     <td>${bestMatch.dist.toFixed(4)}</td>
     <td style="color:${success ? 'green':'red'}">
       ${success ? '待 Email 驗證':'失敗'}
@@ -474,11 +636,16 @@ async function identifyFace() {
   if (success) {
     pendingUnlock = true;
     pendingLabel = bestMatch.label;
+    pendingEmail = bestMatch.email || "";
 
     otpPanel.style.display = "block";
 
+    if (pendingEmail) {
+      emailInput.value = pendingEmail;
+    }
+
     statusEl.textContent =
-      `✅ 人臉辨識成功：${bestMatch.label}.jpg，請完成 Email 驗證`;
+      `✅ 人臉辨識成功：${bestMatch.label}\n請完成 Email OTP 驗證`;
   } else {
     await sendBLE("FAIL");
     statusEl.textContent = "❌ 人臉辨識失敗";
@@ -486,7 +653,7 @@ async function identifyFace() {
 }
 
 async function sendOTP() {
-  const email = emailInput.value.trim();
+  const email = emailInput.value.trim().toLowerCase();
 
   if (!pendingUnlock) {
     statusEl.textContent = "❌ 請先通過人臉辨識";
@@ -498,14 +665,20 @@ async function sendOTP() {
     return;
   }
 
+  // 如果此人臉有綁定 email，必須相同
+  if (pendingEmail && email !== pendingEmail) {
+    statusEl.textContent =
+      "❌ Email 與辨識到的人臉資料不相符，拒絕寄送驗證碼";
+    return;
+  }
+
   try {
     statusEl.textContent = "📧 驗證碼寄送中...";
 
-    const res =
-      await fetch(
-        `${APPS_SCRIPT_URL}?action=send&email=${encodeURIComponent(email)}`
-      );
+    const url =
+      `${APPS_SCRIPT_URL}?action=send&email=${encodeURIComponent(email)}&name=${encodeURIComponent(pendingLabel)}`;
 
+    const res = await fetch(url);
     const data = await res.json();
 
     if (data.ok) {
@@ -522,7 +695,7 @@ async function sendOTP() {
 }
 
 async function verifyOTP() {
-  const email = emailInput.value.trim();
+  const email = emailInput.value.trim().toLowerCase();
   const otp = otpInput.value.trim();
 
   if (!pendingUnlock) {
@@ -532,6 +705,12 @@ async function verifyOTP() {
 
   if (!email || !otp) {
     statusEl.textContent = "❌ 請輸入 Email 與驗證碼";
+    return;
+  }
+
+  if (pendingEmail && email !== pendingEmail) {
+    statusEl.textContent =
+      "❌ Email 與辨識到的人臉資料不相符";
     return;
   }
 
@@ -549,7 +728,7 @@ async function verifyOTP() {
       await sendBLE("UNLOCK");
 
       statusEl.textContent =
-        `🔓 Email 驗證成功，${pendingLabel}.jpg 已開鎖`;
+        `🔓 Email 驗證成功，${pendingLabel} 已開鎖`;
 
       pendingUnlock = false;
       otpPanel.style.display = "none";
@@ -567,92 +746,8 @@ async function verifyOTP() {
   }
 }
 
-async function registerFace() {
-  const label =
-    document.getElementById("newLabelInput").value.trim();
-
-  const file =
-    document.getElementById("faceImageInput").files[0];
-
-  if (!label || !file) {
-    alert("請輸入名稱並選擇照片");
-    statusEl.textContent = "❌ 請輸入名稱並選擇照片";
-    return;
-  }
-
-  statusEl.textContent = "📸 正在讀取照片並擷取人臉特徵...";
-
-  try {
-    const img = await faceapi.bufferToImage(file);
-
-    const detection =
-      await faceapi
-      .detectSingleFace(
-        img,
-        new faceapi.TinyFaceDetectorOptions({
-          inputSize: 224,
-          scoreThreshold: 0.3
-        })
-      )
-      .withFaceLandmarks()
-      .withFaceDescriptor();
-
-    if (!detection) {
-      alert("這張照片沒有偵測到人臉，請換一張清楚正臉照片");
-      statusEl.textContent = "❌ 上傳照片未偵測到人臉";
-      return;
-    }
-
-    const descriptorArray =
-      Array.from(detection.descriptor);
-
-    knownDescriptors.push({
-      label: label,
-      descriptor: new Float32Array(descriptorArray),
-      source: "localStorage"
-    });
-
-    let savedFaces =
-      JSON.parse(localStorage.getItem("registeredFaces") || "[]");
-
-    savedFaces = savedFaces.filter(face => face.label !== label);
-
-    savedFaces.push({
-      label: label,
-      descriptor: descriptorArray
-    });
-
-    localStorage.setItem(
-      "registeredFaces",
-      JSON.stringify(savedFaces)
-    );
-
-    alert("新增成功：" + label);
-
-    statusEl.textContent =
-      `✅ 已新增 ${label} 的臉部資料，並暫存於瀏覽器。總資料數：${knownDescriptors.length}`;
-
-  } catch (error) {
-    console.error(error);
-    alert("新增失敗，請確認照片是否清楚");
-    statusEl.textContent = "❌ 新增臉部資料失敗";
-  }
-}
-
-function clearLocalFaces() {
-  const confirmClear =
-    confirm("確定要清除本機暫存的臉部資料嗎？GitHub 原始照片不會被刪除。");
-
-  if (!confirmClear) return;
-
-  localStorage.removeItem("registeredFaces");
-
-  knownDescriptors =
-    knownDescriptors.filter(item => item.source !== "localStorage");
-
-  statusEl.textContent =
-    `🗑️ 已清除本機暫存資料，目前剩餘 ${knownDescriptors.length} 筆 GitHub 臉部資料`;
-}
+submitRegisterBtn.onclick = submitRegistration;
+skipRegisterBtn.onclick = goToMainSystem;
 
 connectBtn.onclick = connectBLE;
 identifyBtn.onclick = identifyFace;
@@ -660,11 +755,224 @@ identifyBtn.onclick = identifyFace;
 sendOtpBtn.onclick = sendOTP;
 verifyOtpBtn.onclick = verifyOTP;
 
-registerFaceBtn.onclick = registerFace;
-clearLocalFacesBtn.onclick = clearLocalFaces;
-
 loadModels();
 </script>
 
 </body>
 </html>
+'''
+
+apps_script = r'''/*
+Google Apps Script 整合版：
+功能：
+1. 註冊資料寫入 Google Sheet
+2. Email OTP 寄送
+3. Email OTP 驗證
+
+Google Sheet 建議欄位：
+Time | Name | Email | Descriptor | Status
+
+設定方式：
+1. 建立 Google Sheet
+2. 複製 Sheet ID
+3. 將 SHEET_ID 替換成你的 Sheet ID
+4. 到 Apps Script 部署成 Web App
+5. 執行身分：我
+6. 存取權限：任何人
+*/
+
+const SHEET_ID = "PASTE_YOUR_GOOGLE_SHEET_ID_HERE";
+const SHEET_NAME = "Users";
+const OTP_EXPIRE_SECONDS = 300;
+
+function doGet(e) {
+  if (!e || !e.parameter) {
+    return jsonOutput({
+      ok: false,
+      message: "Please call this Web App URL with parameters."
+    });
+  }
+
+  const action = e.parameter.action;
+  const email = (e.parameter.email || "").trim().toLowerCase();
+  const otp = (e.parameter.otp || "").trim();
+  const name = (e.parameter.name || "").trim();
+
+  if (action === "send") {
+    return sendOtp(email, name);
+  }
+
+  if (action === "verify") {
+    return verifyOtp(email, otp);
+  }
+
+  return jsonOutput({
+    ok: false,
+    message: "Invalid GET action"
+  });
+}
+
+function doPost(e) {
+  if (!e || !e.parameter) {
+    return jsonOutput({
+      ok: false,
+      message: "Missing POST parameters"
+    });
+  }
+
+  const action = e.parameter.action;
+
+  if (action === "register") {
+    const name = (e.parameter.name || "").trim();
+    const email = (e.parameter.email || "").trim().toLowerCase();
+    const descriptor = e.parameter.descriptor || "";
+
+    return registerUser(name, email, descriptor);
+  }
+
+  return jsonOutput({
+    ok: false,
+    message: "Invalid POST action"
+  });
+}
+
+function registerUser(name, email, descriptor) {
+  if (!name || !email || !descriptor) {
+    return jsonOutput({
+      ok: false,
+      message: "Missing name, email, or descriptor"
+    });
+  }
+
+  const sheet = getUserSheet();
+
+  sheet.appendRow([
+    new Date(),
+    name,
+    email,
+    descriptor,
+    "pending"
+  ]);
+
+  return jsonOutput({
+    ok: true,
+    message: "Registration saved to Google Sheet"
+  });
+}
+
+function sendOtp(email, name) {
+  if (!email) {
+    return jsonOutput({
+      ok: false,
+      message: "Missing email"
+    });
+  }
+
+  // 若要強制只允許 approved 使用者，可取消下方註解
+  /*
+  if (!isApprovedEmail(email)) {
+    return jsonOutput({
+      ok: false,
+      message: "Email is not approved"
+    });
+  }
+  */
+
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  const cache = CacheService.getScriptCache();
+
+  cache.put("otp_" + email, otp, OTP_EXPIRE_SECONDS);
+
+  const subject = "Smart Lock Email Verification Code";
+  const body =
+    "Hello " + (name || "") + ",\n\n" +
+    "Your smart lock verification code is: " + otp + "\n\n" +
+    "This code will expire in 5 minutes.";
+
+  MailApp.sendEmail({
+    to: email,
+    subject: subject,
+    body: body
+  });
+
+  return jsonOutput({
+    ok: true,
+    message: "OTP sent"
+  });
+}
+
+function verifyOtp(email, otp) {
+  if (!email || !otp) {
+    return jsonOutput({
+      ok: false,
+      message: "Missing email or OTP"
+    });
+  }
+
+  const cache = CacheService.getScriptCache();
+  const savedOtp = cache.get("otp_" + email);
+
+  if (!savedOtp) {
+    return jsonOutput({
+      ok: false,
+      message: "OTP expired or not found"
+    });
+  }
+
+  if (savedOtp !== otp) {
+    return jsonOutput({
+      ok: false,
+      message: "Incorrect OTP"
+    });
+  }
+
+  cache.remove("otp_" + email);
+
+  return jsonOutput({
+    ok: true,
+    message: "OTP verified"
+  });
+}
+
+function isApprovedEmail(email) {
+  const sheet = getUserSheet();
+  const values = sheet.getDataRange().getValues();
+
+  for (let i = 1; i < values.length; i++) {
+    const rowEmail = String(values[i][2] || "").trim().toLowerCase();
+    const status = String(values[i][4] || "").trim().toLowerCase();
+
+    if (rowEmail === email && status === "approved") {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function getUserSheet() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  let sheet = ss.getSheetByName(SHEET_NAME);
+
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_NAME);
+  }
+
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow([
+      "Time",
+      "Name",
+      "Email",
+      "Descriptor",
+      "Status"
+    ]);
+  }
+
+  return sheet;
+}
+
+function jsonOutput(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
