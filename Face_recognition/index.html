@@ -455,10 +455,10 @@ async function submitRegistration() {
     params.append("email", email);
     params.append("descriptor", JSON.stringify(descriptorArray));
 
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method: "POST",
-      body: params
-    });
+    const url =
+    `${APPS_SCRIPT_URL}?action=register&name=${encodeURIComponent(name)}&email=${encodeURIComponent(email)}&descriptor=${encodeURIComponent(JSON.stringify(descriptorArray))}`;
+
+    const res = await fetch(url);
 
     const data = await res.json();
 
