@@ -160,15 +160,14 @@
   <input type="email" id="registerEmailInput" placeholder="請輸入 Gmail">
   <br>
 
-  <input type="file" id="registerFaceInput" accept="image/*">
+  <input type="file" id="registerFaceInput" accept="image/*" multiple>
   <br>
 
   <button id="submitRegisterBtn">送出註冊資料</button>
   <button id="skipRegisterBtn" style="background:#6c757d;">已註冊，直接進入辨識</button>
 
   <div class="note">
-    註冊後會將姓名、Email 與 128 維臉部特徵向量寫入 Google Sheet，並同步暫存於瀏覽器。<br>
-    之後辨識成功時，Email 欄位會自動帶入註冊 Gmail，且不可修改。
+    註冊時請至少上傳 3 張清楚正臉照片。系統會將多組 128 維臉部特徵向量寫入 Google Sheet，並同步暫存於瀏覽器。<br>
   </div>
 </div>
 
@@ -366,12 +365,28 @@ function loadLocalRegisteredFaces() {
       JSON.parse(localStorage.getItem("registeredUsers") || "[]");
 
     savedUsers.forEach(user => {
-      knownDescriptors.push({
-        label: user.name,
-        email: user.email,
-        descriptor: new Float32Array(user.descriptor),
-        source: "localStorage"
-      });
+      // 新版：多張照片，多組 descriptor
+      if (Array.isArray(user.descriptors)) {
+        user.descriptors.forEach((descriptorArray, index) => {
+          knownDescriptors.push({
+            label: user.name,
+            email: user.email,
+            descriptor: new Float32Array(descriptorArray),
+            source: "localStorage",
+            sampleIndex: index + 1
+          });
+        });
+      }
+
+      // 舊版相容：單張照片，一組 descriptor
+      else if (Array.isArray(user.descriptor)) {
+        knownDescriptors.push({
+          label: user.name,
+          email: user.email,
+          descriptor: new Float32Array(user.descriptor),
+          source: "localStorage"
+        });
+      }
     });
   } catch (error) {
     console.error(error);
@@ -389,40 +404,45 @@ function goToMainSystem() {
 async function submitRegistration() {
   const name = registerNameInput.value.trim();
   const email = registerEmailInput.value.trim().toLowerCase();
-  const file = registerFaceInput.files[0];
+  const files = Array.from(registerFaceInput.files || []);
 
-  if (!name || !email || !file) {
-    alert("請輸入姓名、Gmail，並選擇一張人臉照片");
-    statusEl.textContent = "❌ 註冊資料不完整";
+  if (!name || !email || files.length < 3) {
+    alert("請輸入姓名、Gmail，並至少選擇 3 張清楚正臉照片");
+    statusEl.textContent = "❌ 註冊資料不完整，至少需要 3 張照片";
     return;
   }
 
-  statusEl.textContent = "📸 正在讀取照片並擷取 128 維臉部特徵...";
+  statusEl.textContent = "📸 正在讀取多張照片並擷取 128 維臉部特徵...";
 
   try {
-    const img = await faceapi.bufferToImage(file);
+    const descriptorArrays = [];
 
-    const detection =
-      await faceapi
-      .detectSingleFace(
-        img,
-        new faceapi.TinyFaceDetectorOptions({
-          inputSize: 224,
-          scoreThreshold: 0.3
-        })
-      )
-      .withFaceLandmarks()
-      .withFaceDescriptor();
+    for (let i = 0; i < files.length; i++) {
+      statusEl.textContent = `📸 正在處理第 ${i + 1} / ${files.length} 張照片...`;
 
-    if (!detection) {
-      alert("這張照片未偵測到人臉，請換一張清楚正臉照片");
-      statusEl.textContent = "❌ 上傳照片未偵測到人臉";
-      return;
+      const img = await faceapi.bufferToImage(files[i]);
+
+      const detection =
+        await faceapi
+        .detectSingleFace(
+          img,
+          new faceapi.TinyFaceDetectorOptions({
+            inputSize: 224,
+            scoreThreshold: 0.3
+          })
+        )
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+
+      if (!detection) {
+        alert(`第 ${i + 1} 張照片未偵測到人臉，請換一張清楚正臉照片`);
+        statusEl.textContent = `❌ 第 ${i + 1} 張照片未偵測到人臉`;
+        return;
+      }
+
+      descriptorArrays.push(Array.from(detection.descriptor));
     }
 
-    const descriptorArray = Array.from(detection.descriptor);
-
-    // 1. 存到 localStorage，供本機辨識使用
     let savedUsers =
       JSON.parse(localStorage.getItem("registeredUsers") || "[]");
 
@@ -431,7 +451,7 @@ async function submitRegistration() {
     savedUsers.push({
       name: name,
       email: email,
-      descriptor: descriptorArray
+      descriptors: descriptorArrays
     });
 
     localStorage.setItem(
@@ -439,27 +459,27 @@ async function submitRegistration() {
       JSON.stringify(savedUsers)
     );
 
-    // 同步更新目前頁面的 knownDescriptors
     knownDescriptors = knownDescriptors.filter(
       item => !(item.source === "localStorage" && item.email === email)
     );
 
-    knownDescriptors.push({
-      label: name,
-      email: email,
-      descriptor: new Float32Array(descriptorArray),
-      source: "localStorage"
+    descriptorArrays.forEach((descriptorArray, index) => {
+      knownDescriptors.push({
+        label: name,
+        email: email,
+        descriptor: new Float32Array(descriptorArray),
+        source: "localStorage",
+        sampleIndex: index + 1
+      });
     });
 
-    // 2. 寫入 Google Sheet
-    // 使用 GET 呼叫 Apps Script 的 register 功能，避免 POST 在 Web App 上收不到參數
     statusEl.textContent = "☁️ 正在寫入 Google Sheet...";
 
     const registerUrl =
       `${APPS_SCRIPT_URL}?action=register` +
       `&name=${encodeURIComponent(name)}` +
       `&email=${encodeURIComponent(email)}` +
-      `&descriptor=${encodeURIComponent(JSON.stringify(descriptorArray))}`;
+      `&descriptor=${encodeURIComponent(JSON.stringify(descriptorArrays))}`;
 
     const res = await fetch(registerUrl);
     const data = await res.json();
@@ -472,9 +492,9 @@ async function submitRegistration() {
       return;
     }
 
-    alert("註冊成功，資料已寫入 Google Sheet");
+    alert(`註冊成功，已儲存 ${descriptorArrays.length} 張照片特徵資料`);
     statusEl.textContent =
-      `✅ 註冊成功：${name} / ${email}\n已寫入 Google Sheet，並暫存於瀏覽器`;
+      `✅ 註冊成功：${name} / ${email}\n已儲存 ${descriptorArrays.length} 組特徵向量，並寫入 Google Sheet`;
 
     goToMainSystem();
 
