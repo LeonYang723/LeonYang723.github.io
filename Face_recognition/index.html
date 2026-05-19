@@ -142,6 +142,62 @@
       max-width: 95%;
       margin: 30px auto;
     }
+
+    #previewContainer {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 12px;
+      align-items: center;
+    }
+
+    .preview-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      width: 92%;
+      background: #f7f7f7;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 8px;
+      text-align: left;
+    }
+
+    .preview-item img {
+      width: 58px;
+      height: 58px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+
+    .preview-info {
+      flex: 1;
+      font-size: 13px;
+      color: #333;
+      overflow: hidden;
+    }
+
+    .preview-info div {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .preview-status {
+      font-size: 12px;
+      color: #666;
+      margin-top: 4px;
+    }
+
+    .delete-photo-btn {
+      background: #dc3545;
+      padding: 8px 10px;
+      font-size: 13px;
+      border-radius: 8px;
+    }
+
   </style>
 </head>
 
@@ -163,11 +219,14 @@
   <input type="file" id="registerFaceInput" accept="image/*" multiple>
   <br>
 
+  <div id="previewContainer"></div>
+
   <button id="submitRegisterBtn">送出註冊資料</button>
   <button id="skipRegisterBtn" style="background:#6c757d;">已註冊，直接進入辨識</button>
 
   <div class="note">
     註冊時請至少上傳 3 張清楚正臉照片。系統會將多組 128 維臉部特徵向量寫入 Google Sheet，並同步暫存於瀏覽器。<br>
+    之後辨識成功時，Email 欄位會自動帶入註冊 Gmail，且不可修改。
   </div>
 </div>
 
@@ -262,6 +321,7 @@ const mainSystem = document.getElementById("mainSystem");
 const registerNameInput = document.getElementById("registerNameInput");
 const registerEmailInput = document.getElementById("registerEmailInput");
 const registerFaceInput = document.getElementById("registerFaceInput");
+const previewContainer = document.getElementById("previewContainer");
 const submitRegisterBtn = document.getElementById("submitRegisterBtn");
 const skipRegisterBtn = document.getElementById("skipRegisterBtn");
 
@@ -280,6 +340,7 @@ let pendingUnlock = false;
 let pendingLabel = "";
 let pendingEmail = "";
 let indexCounter = 1;
+let selectedFaceFiles = [];
 
 const chart = new Chart(
   document.getElementById("scoreChart"),
@@ -401,10 +462,75 @@ function goToMainSystem() {
     `✅ 已進入辨識頁面，目前共 ${knownDescriptors.length} 筆臉部資料`;
 }
 
+
+function updatePhotoPreview() {
+  previewContainer.innerHTML = "";
+
+  if (selectedFaceFiles.length === 0) {
+    previewContainer.innerHTML =
+      '<div class="note">尚未選擇照片，請至少上傳 3 張清楚正臉照片。</div>';
+    return;
+  }
+
+  selectedFaceFiles.forEach((file, index) => {
+    const item = document.createElement("div");
+    item.className = "preview-item";
+
+    const img = document.createElement("img");
+    img.src = URL.createObjectURL(file);
+
+    const info = document.createElement("div");
+    info.className = "preview-info";
+    info.innerHTML = `
+      <div>照片 ${index + 1}：${file.name}</div>
+      <div class="preview-status" id="photoStatus${index}">等待檢測</div>
+    `;
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "delete-photo-btn";
+    deleteBtn.textContent = "刪除";
+    deleteBtn.onclick = () => {
+      selectedFaceFiles.splice(index, 1);
+      updatePhotoPreview();
+      statusEl.textContent =
+        `🗑️ 已刪除照片，目前剩餘 ${selectedFaceFiles.length} 張`;
+    };
+
+    item.appendChild(img);
+    item.appendChild(info);
+    item.appendChild(deleteBtn);
+
+    previewContainer.appendChild(item);
+  });
+}
+
+function updatePhotoStatus(index, message, color = "#666") {
+  const status = document.getElementById(`photoStatus${index}`);
+  if (status) {
+    status.textContent = message;
+    status.style.color = color;
+  }
+}
+
+registerFaceInput.addEventListener("change", () => {
+  const newFiles = Array.from(registerFaceInput.files || []);
+
+  selectedFaceFiles = selectedFaceFiles.concat(newFiles);
+
+  // 清空 input，讓同一張照片刪掉後可以再次選取
+  registerFaceInput.value = "";
+
+  updatePhotoPreview();
+
+  statusEl.textContent =
+    `📸 已選擇 ${selectedFaceFiles.length} 張照片，至少需要 3 張。`;
+});
+
+
 async function submitRegistration() {
   const name = registerNameInput.value.trim();
   const email = registerEmailInput.value.trim().toLowerCase();
-  const files = Array.from(registerFaceInput.files || []);
+  const files = selectedFaceFiles;
 
   if (!name || !email || files.length < 3) {
     alert("請輸入姓名、Gmail，並至少選擇 3 張清楚正臉照片");
@@ -416,9 +542,11 @@ async function submitRegistration() {
 
   try {
     const descriptorArrays = [];
+    const failedIndexes = [];
 
     for (let i = 0; i < files.length; i++) {
       statusEl.textContent = `📸 正在處理第 ${i + 1} / ${files.length} 張照片...`;
+      updatePhotoStatus(i, "檢測中...", "#007bff");
 
       const img = await faceapi.bufferToImage(files[i]);
 
@@ -435,12 +563,24 @@ async function submitRegistration() {
         .withFaceDescriptor();
 
       if (!detection) {
-        alert(`第 ${i + 1} 張照片未偵測到人臉，請換一張清楚正臉照片`);
-        statusEl.textContent = `❌ 第 ${i + 1} 張照片未偵測到人臉`;
-        return;
+        failedIndexes.push(i);
+        updatePhotoStatus(i, "未偵測到人臉，請刪除或更換", "#dc3545");
+        continue;
       }
 
       descriptorArrays.push(Array.from(detection.descriptor));
+      updatePhotoStatus(i, "已成功擷取人臉特徵", "green");
+    }
+
+    if (descriptorArrays.length < 3) {
+      alert(
+        `有效人臉照片不足，目前只有 ${descriptorArrays.length} 張成功，至少需要 3 張。請刪除失敗照片並重新補上。`
+      );
+
+      statusEl.textContent =
+        `❌ 有效照片不足：成功 ${descriptorArrays.length} 張，失敗 ${failedIndexes.length} 張。請刪除紅色標示照片後補上新照片。`;
+
+      return;
     }
 
     let savedUsers =
