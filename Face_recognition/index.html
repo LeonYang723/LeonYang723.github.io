@@ -615,15 +615,17 @@ async function submitRegistration() {
 
     statusEl.textContent = "☁️ 正在寫入 Google Sheet...";
 
-    const registerUrl =
-      `${APPS_SCRIPT_URL}?action=register` +
-      `&name=${encodeURIComponent(name)}` +
-      `&email=${encodeURIComponent(email)}` +
-      `&descriptor=${encodeURIComponent(JSON.stringify(descriptorArrays))}`;
+    const res = await fetch(APPS_SCRIPT_URL, {
+  method: "POST",
+  body: JSON.stringify({
+    action: "register",
+    name: name,
+    email: email,
+    descriptor: descriptorArrays
+  })
+});
 
-    const res = await fetch(registerUrl);
-    const data = await res.json();
-
+const data = await res.json();
     if (!data.ok) {
       alert("本機註冊成功，但 Google Sheet 寫入失敗：" + (data.message || "unknown error"));
       statusEl.textContent =
