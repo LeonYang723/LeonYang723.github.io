@@ -779,7 +779,7 @@ function goToMainSystem(user = null) {
   }
 }
 
-function loginUser() {
+async function loginUser() {
   const name = loginNameInput.value.trim();
   const email = loginEmailInput.value.trim().toLowerCase();
 
@@ -789,18 +789,62 @@ function loginUser() {
     return;
   }
 
-  const savedUsers =
+  statusEl.textContent = "🔍 正在檢查本機註冊資料...";
+
+  let savedUsers =
     JSON.parse(localStorage.getItem("registeredUsers") || "[]");
 
-  const user = savedUsers.find(item =>
+  let user = savedUsers.find(item =>
     item.name === name &&
     String(item.email || "").toLowerCase() === email
   );
 
+  // 如果本機 localStorage 找不到，就改從 Google Sheet 雲端讀取
   if (!user) {
-    alert("找不到此使用者，請確認姓名與 Gmail 是否與註冊資料一致");
-    statusEl.textContent = "❌ 登入失敗：找不到此使用者";
-    return;
+    try {
+      statusEl.textContent = "☁️ 本機找不到資料，正在從 Google Sheet 載入...";
+
+      const url =
+        `${APPS_SCRIPT_URL}?action=getUser` +
+        `&name=${encodeURIComponent(name)}` +
+        `&email=${encodeURIComponent(email)}`;
+
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (!data.ok) {
+        alert("找不到此使用者，請確認姓名與 Gmail 是否與註冊資料一致");
+        statusEl.textContent =
+          `❌ 登入失敗：${data.message || "找不到此使用者"}`;
+        return;
+      }
+
+      user = {
+        name: data.name,
+        email: data.email,
+        descriptors: data.descriptors
+      };
+
+      // 寫回目前瀏覽器 localStorage，之後同裝置可更快登入
+      savedUsers = savedUsers.filter(item =>
+        String(item.email || "").toLowerCase() !== email
+      );
+
+      savedUsers.push(user);
+
+      localStorage.setItem(
+        "registeredUsers",
+        JSON.stringify(savedUsers)
+      );
+
+      statusEl.textContent = "✅ 已從 Google Sheet 載入使用者資料";
+
+    } catch (error) {
+      console.error(error);
+      alert("雲端登入失敗，請確認 Apps Script 或網路狀態");
+      statusEl.textContent = "❌ 雲端登入失敗";
+      return;
+    }
   }
 
   if (!Array.isArray(user.descriptors) || user.descriptors.length < 3) {
@@ -808,6 +852,25 @@ function loginUser() {
     statusEl.textContent = "❌ 登入失敗：臉部資料不足";
     return;
   }
+
+  // 將該使用者資料加入 knownDescriptors，避免桌機或新瀏覽器一開始是 0 筆資料
+  knownDescriptors = knownDescriptors.filter(
+    item => !(
+      (item.source === "cloudSheet" || item.source === "localStorage") &&
+      item.email &&
+      item.email.toLowerCase() === email
+    )
+  );
+
+  user.descriptors.forEach((descriptorArray, index) => {
+    knownDescriptors.push({
+      label: user.name,
+      email: user.email,
+      descriptor: new Float32Array(descriptorArray),
+      source: "cloudSheet",
+      sampleIndex: index + 1
+    });
+  });
 
   activeUser = {
     name: user.name,
