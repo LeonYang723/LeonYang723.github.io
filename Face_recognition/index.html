@@ -281,6 +281,33 @@
       margin-top: 4px;
     }
 
+
+    .camera-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin: 14px auto 8px auto;
+      max-width: 430px;
+    }
+
+    .camera-buttons button {
+      min-width: 150px;
+      font-weight: bold;
+    }
+
+    @media (max-width: 480px) {
+      .camera-buttons {
+        gap: 8px;
+      }
+
+      .camera-buttons button {
+        min-width: 135px;
+        font-size: 15px;
+        padding: 10px 12px;
+      }
+    }
+
   </style>
 </head>
 
@@ -359,13 +386,8 @@
     <h3>🧠 人臉辨識系統</h3>
     <div id="activeUserDisplay" style="font-weight:bold;color:#007bff;margin-bottom:8px;">👤 尚未登入</div>
     <div class="note">
-      請先登入使用者，再連接 ESP32 並開始辨識。辨識成功後，系統會要求 Email OTP 二次驗證。
+      請先登入使用者，確認鏡頭畫面後再點選下方按鈕連接 ESP32 與開始辨識。辨識成功後，系統會要求 Email OTP 二次驗證。
     </div>
-  </div>
-
-  <div class="sticky-buttons">
-    <button id="connectBtn">🔗 連接 ESP32</button>
-    <button id="identifyBtn" disabled>🧠 開始辨識</button>
   </div>
 
   <div class="panel" id="otpPanel" style="display:none;">
@@ -390,6 +412,11 @@
   <div id="videoContainer">
     <video id="video" autoplay muted playsinline></video>
     <canvas id="overlay"></canvas>
+  </div>
+
+  <div class="camera-buttons">
+    <button id="connectBtn">🔗 連接 ESP32</button>
+    <button id="identifyBtn" disabled>🧠 開始辨識</button>
   </div>
 
   <div id="chartContainer">
@@ -585,6 +612,7 @@ function loadLocalRegisteredFaces() {
 }
 
 function showRegisterMode() {
+  document.getElementById("modeSelector").style.display = "flex";
   registerStep.style.display = "block";
   loginStep.style.display = "none";
   showRegisterBtn.classList.add("active");
@@ -593,6 +621,7 @@ function showRegisterMode() {
 }
 
 function showLoginMode() {
+  document.getElementById("modeSelector").style.display = "flex";
   registerStep.style.display = "none";
   loginStep.style.display = "block";
   showRegisterBtn.classList.remove("active");
@@ -732,6 +761,7 @@ function goToMainSystem(user = null) {
 
   registerStep.style.display = "none";
   loginStep.style.display = "none";
+  document.getElementById("modeSelector").style.display = "none";
   mainSystem.style.display = "block";
 
   if (activeUser) {
