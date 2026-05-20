@@ -221,7 +221,6 @@
   <div id="capturePreviewContainer"></div>
 
   <button id="submitRegisterBtn">送出註冊資料</button>
-  <button id="skipRegisterBtn" style="background:#6c757d;">已註冊，直接進入辨識</button>
 
   <div class="note">
     請使用前鏡頭即時拍攝至少 3 張清楚正臉照片。<br>
@@ -230,12 +229,29 @@
   </div>
 </div>
 
+<div id="loginStep" class="panel">
+  <div class="step-label">Step 1-2 使用者登入</div>
+  <h3>👤 已註冊使用者登入</h3>
+
+  <input type="text" id="loginNameInput" placeholder="請輸入註冊姓名">
+  <br>
+
+  <input type="email" id="loginEmailInput" placeholder="請輸入註冊 Gmail">
+  <br>
+
+  <button id="loginBtn">登入並進入辨識</button>
+
+  <div class="note">
+    已註冊者需以姓名與 Email 登入。登入後，系統只會比對該使用者已註冊的臉部特徵資料。
+  </div>
+</div>
+
 <div id="mainSystem">
   <div class="panel">
     <div class="step-label">Step 2 人臉辨識與開鎖</div>
     <h3>🧠 人臉辨識系統</h3>
     <div class="note">
-      請先連接 ESP32，再開始辨識。辨識成功後，系統會要求 Email OTP 二次驗證。
+      請先登入使用者，再連接 ESP32 並開始辨識。辨識成功後，系統會要求 Email OTP 二次驗證。
     </div>
   </div>
 
@@ -309,7 +325,11 @@ const capturePhotoBtn = document.getElementById("capturePhotoBtn");
 const clearCaptureBtn = document.getElementById("clearCaptureBtn");
 const capturePreviewContainer = document.getElementById("capturePreviewContainer");
 const submitRegisterBtn = document.getElementById("submitRegisterBtn");
-const skipRegisterBtn = document.getElementById("skipRegisterBtn");
+
+const loginStep = document.getElementById("loginStep");
+const loginNameInput = document.getElementById("loginNameInput");
+const loginEmailInput = document.getElementById("loginEmailInput");
+const loginBtn = document.getElementById("loginBtn");
 
 const video = document.getElementById("video");
 const canvas = document.getElementById("overlay");
@@ -335,6 +355,7 @@ let pendingEmail = "";
 let indexCounter = 1;
 let capturedImages = [];
 let registerStream = null;
+let activeUser = null;
 
 const chart = new Chart(
   document.getElementById("scoreChart"),
@@ -532,16 +553,65 @@ function clearCapturedPhotos() {
   statusEl.textContent = "🗑️ 已清空註冊照片";
 }
 
-function goToMainSystem() {
+function goToMainSystem(user = null) {
+  if (user) {
+    activeUser = user;
+  }
+
   registerStep.style.display = "none";
+  loginStep.style.display = "none";
   mainSystem.style.display = "block";
-  statusEl.textContent =
-    `✅ 已進入辨識頁面，目前共 ${knownDescriptors.length} 筆臉部資料`;
+
+  if (activeUser) {
+    statusEl.textContent =
+      `✅ ${activeUser.name} 已登入，可進行人臉辨識`;
+  } else {
+    statusEl.textContent =
+      "⚠️ 尚未登入使用者，請先完成註冊或登入";
+  }
 
   if (registerStream) {
     registerStream.getTracks().forEach(track => track.stop());
     registerStream = null;
   }
+}
+
+function loginUser() {
+  const name = loginNameInput.value.trim();
+  const email = loginEmailInput.value.trim().toLowerCase();
+
+  if (!name || !email) {
+    alert("請輸入註冊姓名與 Gmail");
+    statusEl.textContent = "❌ 登入資料不完整";
+    return;
+  }
+
+  const savedUsers =
+    JSON.parse(localStorage.getItem("registeredUsers") || "[]");
+
+  const user = savedUsers.find(item =>
+    item.name === name &&
+    String(item.email || "").toLowerCase() === email
+  );
+
+  if (!user) {
+    alert("找不到此使用者，請確認姓名與 Gmail 是否與註冊資料一致");
+    statusEl.textContent = "❌ 登入失敗：找不到此使用者";
+    return;
+  }
+
+  if (!Array.isArray(user.descriptors) || user.descriptors.length < 3) {
+    alert("此使用者的臉部資料不足，請重新註冊至少 3 張照片");
+    statusEl.textContent = "❌ 登入失敗：臉部資料不足";
+    return;
+  }
+
+  activeUser = {
+    name: user.name,
+    email: user.email
+  };
+
+  goToMainSystem(activeUser);
 }
 
 async function submitRegistration() {
@@ -641,7 +711,10 @@ async function submitRegistration() {
     statusEl.textContent =
       `✅ 註冊成功：${name} / ${email}\n已儲存 ${descriptorArrays.length} 組特徵向量，並寫入 Google Sheet`;
 
-    goToMainSystem();
+    goToMainSystem({
+      name: name,
+      email: email
+    });
 
   } catch (error) {
     console.error(error);
@@ -742,14 +815,24 @@ async function identifyFace() {
     return;
   }
 
-  if (knownDescriptors.length === 0) {
-    statusEl.textContent = "❌ 尚未載入任何臉部資料";
+  if (!activeUser) {
+    statusEl.textContent = "❌ 請先以姓名與 Email 登入";
+    return;
+  }
+
+  const userDescriptors = knownDescriptors.filter(item =>
+    item.email &&
+    item.email.toLowerCase() === activeUser.email.toLowerCase()
+  );
+
+  if (userDescriptors.length === 0) {
+    statusEl.textContent = "❌ 此登入使用者尚未載入臉部資料";
     return;
   }
 
   let bestMatch = null;
 
-  for (let item of knownDescriptors) {
+  for (let item of userDescriptors) {
     const dist =
       faceapi.euclideanDistance(
         result.descriptor,
@@ -816,7 +899,7 @@ async function identifyFace() {
   if (success) {
     pendingUnlock = true;
     pendingLabel = bestMatch.label;
-    pendingEmail = bestMatch.email || "";
+    pendingEmail = bestMatch.email || activeUser.email || "";
 
     otpPanel.style.display = "block";
 
@@ -934,7 +1017,7 @@ capturePhotoBtn.onclick = captureRegisterPhoto;
 clearCaptureBtn.onclick = clearCapturedPhotos;
 
 submitRegisterBtn.onclick = submitRegistration;
-skipRegisterBtn.onclick = goToMainSystem;
+loginBtn.onclick = loginUser;
 
 connectBtn.onclick = connectBLE;
 identifyBtn.onclick = identifyFace;
