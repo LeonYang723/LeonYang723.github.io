@@ -192,12 +192,106 @@
       max-width: 95%;
       margin: 30px auto;
     }
+
+    #modeSelector {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin: 12px auto 18px auto;
+    }
+
+    .mode-btn {
+      width: 170px;
+      max-width: 42%;
+      font-weight: bold;
+      font-size: 16px;
+      padding: 12px 10px;
+    }
+
+    .mode-btn.secondary {
+      background: #28a745;
+    }
+
+    .mode-btn.active {
+      box-shadow: 0 0 0 3px rgba(0,123,255,0.25);
+      transform: translateY(-1px);
+    }
+
+    #registerStep,
+    #loginStep {
+      display: none;
+    }
+
+    #captureProgress {
+      font-size: 20px;
+      font-weight: bold;
+      color: #007bff;
+      margin: 10px 0;
+    }
+
+    #cameraFrame {
+      position: relative;
+      width: 360px;
+      max-width: 95%;
+      margin: 10px auto;
+    }
+
+    #cameraFlash {
+      position: absolute;
+      inset: 0;
+      border-radius: 12px;
+      background: white;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+      z-index: 5;
+    }
+
+    #cameraFlash.flash {
+      opacity: 0.85;
+    }
+
+    #captureHint {
+      font-size: 13px;
+      color: #666;
+      margin-top: 4px;
+    }
+
+    #capturedMiniBar {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin: 10px auto;
+    }
+
+    .capture-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #ccc;
+      display: inline-block;
+    }
+
+    .capture-dot.done {
+      background: #007bff;
+    }
+
+    .capture-item {
+      margin-top: 4px;
+    }
+
   </style>
 </head>
 
 <body>
 
 <h2>🔐 臉部辨識智慧門鎖</h2>
+
+<div id="modeSelector">
+  <button id="showRegisterBtn" class="mode-btn">📝 新使用者註冊</button>
+  <button id="showLoginBtn" class="mode-btn secondary">🔐 已註冊登入</button>
+</div>
 
 <div id="registerStep" class="panel">
   <div class="step-label">Step 1 註冊資料</div>
@@ -209,13 +303,26 @@
   <input type="email" id="registerEmailInput" placeholder="請輸入 Gmail">
   <br>
 
-  <video id="registerVideo" autoplay muted playsinline></video>
+  <div id="captureProgress">拍攝進度：0 / 3</div>
+
+  <div id="cameraFrame">
+    <video id="registerVideo" autoplay muted playsinline></video>
+    <div id="cameraFlash"></div>
+  </div>
+
   <canvas id="registerCanvas" style="display:none;"></canvas>
+
+  <div id="capturedMiniBar">
+    <span class="capture-dot" id="dot1"></span>
+    <span class="capture-dot" id="dot2"></span>
+    <span class="capture-dot" id="dot3"></span>
+  </div>
+
+  <div id="captureHint">拍攝時請保持正臉，建議微調角度拍攝 3 張。</div>
 
   <div>
     <button id="startRegisterCameraBtn">啟動註冊鏡頭</button>
     <button id="capturePhotoBtn">📸 拍攝照片</button>
-    <button id="clearCaptureBtn" style="background:#dc3545;">清空照片</button>
   </div>
 
   <div id="capturePreviewContainer"></div>
@@ -250,6 +357,7 @@
   <div class="panel">
     <div class="step-label">Step 2 人臉辨識與開鎖</div>
     <h3>🧠 人臉辨識系統</h3>
+    <div id="activeUserDisplay" style="font-weight:bold;color:#007bff;margin-bottom:8px;">👤 尚未登入</div>
     <div class="note">
       請先登入使用者，再連接 ESP32 並開始辨識。辨識成功後，系統會要求 Email OTP 二次驗證。
     </div>
@@ -322,8 +430,17 @@ const registerVideo = document.getElementById("registerVideo");
 const registerCanvas = document.getElementById("registerCanvas");
 const startRegisterCameraBtn = document.getElementById("startRegisterCameraBtn");
 const capturePhotoBtn = document.getElementById("capturePhotoBtn");
-const clearCaptureBtn = document.getElementById("clearCaptureBtn");
 const capturePreviewContainer = document.getElementById("capturePreviewContainer");
+const captureProgress = document.getElementById("captureProgress");
+const cameraFlash = document.getElementById("cameraFlash");
+const captureDots = [
+  document.getElementById("dot1"),
+  document.getElementById("dot2"),
+  document.getElementById("dot3")
+];
+
+const showRegisterBtn = document.getElementById("showRegisterBtn");
+const showLoginBtn = document.getElementById("showLoginBtn");
 const submitRegisterBtn = document.getElementById("submitRegisterBtn");
 
 const loginStep = document.getElementById("loginStep");
@@ -346,6 +463,7 @@ const emailInput = document.getElementById("emailInput");
 const otpInput = document.getElementById("otpInput");
 const sendOtpBtn = document.getElementById("sendOtpBtn");
 const verifyOtpBtn = document.getElementById("verifyOtpBtn");
+const activeUserDisplay = document.getElementById("activeUserDisplay");
 
 let UARTService;
 let knownDescriptors = [];
@@ -466,6 +584,56 @@ function loadLocalRegisteredFaces() {
   }
 }
 
+function showRegisterMode() {
+  registerStep.style.display = "block";
+  loginStep.style.display = "none";
+  showRegisterBtn.classList.add("active");
+  showLoginBtn.classList.remove("active");
+  statusEl.textContent = "📝 請完成新使用者註冊";
+}
+
+function showLoginMode() {
+  registerStep.style.display = "none";
+  loginStep.style.display = "block";
+  showRegisterBtn.classList.remove("active");
+  showLoginBtn.classList.add("active");
+  statusEl.textContent = "🔐 請輸入已註冊的姓名與 Gmail 登入";
+
+  if (registerStream) {
+    registerStream.getTracks().forEach(track => track.stop());
+    registerStream = null;
+  }
+}
+
+function updateCaptureProgress() {
+  const count = capturedImages.length;
+  captureProgress.textContent = `拍攝進度：${count} / 3`;
+
+  captureDots.forEach((dot, index) => {
+    if (index < count) {
+      dot.classList.add("done");
+    } else {
+      dot.classList.remove("done");
+    }
+  });
+
+  if (count >= 3) {
+    capturePhotoBtn.disabled = true;
+    captureHint.textContent = "✅ 已完成 3 張照片，可送出註冊資料。若要重拍，請刪除縮圖後重新拍攝。";
+  } else {
+    capturePhotoBtn.disabled = false;
+    captureHint.textContent = `請再拍攝 ${3 - count} 張照片。`;
+  }
+}
+
+function triggerCameraFlash() {
+  cameraFlash.classList.add("flash");
+  setTimeout(() => {
+    cameraFlash.classList.remove("flash");
+  }, 180);
+}
+
+
 async function startRegisterCamera() {
   try {
     if (registerStream) {
@@ -510,7 +678,9 @@ function captureRegisterPhoto() {
 
   const imageData = registerCanvas.toDataURL("image/jpeg", 0.92);
   capturedImages.push(imageData);
+  triggerCameraFlash();
   renderCapturePreview();
+  updateCaptureProgress();
 
   statusEl.textContent = `📸 已拍攝 ${capturedImages.length} / 3 張照片`;
 }
@@ -538,6 +708,7 @@ function renderCapturePreview() {
     delBtn.onclick = () => {
       capturedImages.splice(index, 1);
       renderCapturePreview();
+      updateCaptureProgress();
       statusEl.textContent = `🗑️ 已刪除照片，目前剩餘 ${capturedImages.length} 張`;
     };
 
@@ -550,6 +721,7 @@ function renderCapturePreview() {
 function clearCapturedPhotos() {
   capturedImages = [];
   renderCapturePreview();
+  updateCaptureProgress();
   statusEl.textContent = "🗑️ 已清空註冊照片";
 }
 
@@ -563,6 +735,7 @@ function goToMainSystem(user = null) {
   mainSystem.style.display = "block";
 
   if (activeUser) {
+    activeUserDisplay.textContent = `👤 目前登入：${activeUser.name}（${activeUser.email}）`;
     statusEl.textContent =
       `✅ ${activeUser.name} 已登入，可進行人臉辨識`;
   } else {
@@ -1012,9 +1185,11 @@ async function verifyOTP() {
   }
 }
 
+showRegisterBtn.onclick = showRegisterMode;
+showLoginBtn.onclick = showLoginMode;
+
 startRegisterCameraBtn.onclick = startRegisterCamera;
 capturePhotoBtn.onclick = captureRegisterPhoto;
-clearCaptureBtn.onclick = clearCapturedPhotos;
 
 submitRegisterBtn.onclick = submitRegistration;
 loginBtn.onclick = loginUser;
@@ -1026,6 +1201,8 @@ sendOtpBtn.onclick = sendOTP;
 verifyOtpBtn.onclick = verifyOTP;
 
 renderCapturePreview();
+updateCaptureProgress();
+showLoginMode();
 loadModels();
 </script>
 
