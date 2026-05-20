@@ -91,24 +91,74 @@
       margin-bottom: 10px;
     }
 
+    #registerVideo,
     #videoContainer {
-      position: relative;
       width: 360px;
       max-width: 95%;
-      margin: auto;
+      margin: 10px auto;
       background: black;
-      border-radius: 10px;
+      border-radius: 12px;
       overflow: hidden;
     }
 
-    video, canvas {
+    #registerVideo {
+      transform: scaleX(-1);
+    }
+
+    #videoContainer {
+      position: relative;
+    }
+
+    #videoContainer video,
+    #videoContainer canvas {
       width: 100%;
+    }
+
+    #videoContainer video {
+      transform: scaleX(-1);
     }
 
     canvas#overlay {
       position: absolute;
       top: 0;
       left: 0;
+      transform: scaleX(-1);
+    }
+
+    #capturePreviewContainer {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .capture-item {
+      position: relative;
+      width: 90px;
+    }
+
+    .capture-preview {
+      width: 90px;
+      height: 90px;
+      object-fit: cover;
+      border-radius: 12px;
+      border: 2px solid #007bff;
+    }
+
+    .delete-capture-btn {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      background: #dc3545;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      font-size: 12px;
+      line-height: 24px;
     }
 
     #status {
@@ -142,62 +192,6 @@
       max-width: 95%;
       margin: 30px auto;
     }
-
-    #previewContainer {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-top: 12px;
-      align-items: center;
-    }
-
-    .preview-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      width: 92%;
-      background: #f7f7f7;
-      border: 1px solid #ddd;
-      border-radius: 10px;
-      padding: 8px;
-      text-align: left;
-    }
-
-    .preview-item img {
-      width: 58px;
-      height: 58px;
-      object-fit: cover;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-    }
-
-    .preview-info {
-      flex: 1;
-      font-size: 13px;
-      color: #333;
-      overflow: hidden;
-    }
-
-    .preview-info div {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .preview-status {
-      font-size: 12px;
-      color: #666;
-      margin-top: 4px;
-    }
-
-    .delete-photo-btn {
-      background: #dc3545;
-      padding: 8px 10px;
-      font-size: 13px;
-      border-radius: 8px;
-    }
-
   </style>
 </head>
 
@@ -205,7 +199,6 @@
 
 <h2>🔐 臉部辨識智慧門鎖</h2>
 
-<!-- Step 1: Registration -->
 <div id="registerStep" class="panel">
   <div class="step-label">Step 1 註冊資料</div>
   <h3>📸 使用者臉部資料註冊</h3>
@@ -216,21 +209,27 @@
   <input type="email" id="registerEmailInput" placeholder="請輸入 Gmail">
   <br>
 
-  <input type="file" id="registerFaceInput" accept="image/*" multiple>
-  <br>
+  <video id="registerVideo" autoplay muted playsinline></video>
+  <canvas id="registerCanvas" style="display:none;"></canvas>
 
-  <div id="previewContainer"></div>
+  <div>
+    <button id="startRegisterCameraBtn">啟動註冊鏡頭</button>
+    <button id="capturePhotoBtn">📸 拍攝照片</button>
+    <button id="clearCaptureBtn" style="background:#dc3545;">清空照片</button>
+  </div>
+
+  <div id="capturePreviewContainer"></div>
 
   <button id="submitRegisterBtn">送出註冊資料</button>
   <button id="skipRegisterBtn" style="background:#6c757d;">已註冊，直接進入辨識</button>
 
   <div class="note">
-    註冊時請至少上傳 3 張清楚正臉照片。系統會將多組 128 維臉部特徵向量寫入 Google Sheet，並同步暫存於瀏覽器。<br>
+    請使用前鏡頭即時拍攝至少 3 張清楚正臉照片。<br>
+    系統會將多組 128 維臉部特徵向量寫入 Google Sheet，並同步暫存於瀏覽器。<br>
     之後辨識成功時，Email 欄位會自動帶入註冊 Gmail，且不可修改。
   </div>
 </div>
 
-<!-- Step 2: Face recognition + BLE + OTP -->
 <div id="mainSystem">
   <div class="panel">
     <div class="step-label">Step 2 人臉辨識與開鎖</div>
@@ -252,11 +251,9 @@
     <br>
 
     <button id="sendOtpBtn">寄送驗證碼</button>
-
     <br>
 
     <input type="text" id="otpInput" placeholder="請輸入 6 位數驗證碼">
-
     <br>
 
     <button id="verifyOtpBtn">確認驗證並開鎖</button>
@@ -293,20 +290,26 @@
 <div id="status">📦 模型載入中...</div>
 
 <script>
-/*
-  重要：
-  1. APPS_SCRIPT_URL 請確認為最新部署後的 Google Apps Script Web App URL。
-  2. Apps Script 後端 doGet(e) 需支援 action=register / send / verify。
-  3. Google Sheet 欄位建議為：
-     Time | Name | Email | Descriptor | Status
-*/
 const APPS_SCRIPT_URL =
 "https://script.google.com/macros/s/AKfycbyh2XA4p67jsKKhfvPTq5q0eowWlCPgNJZZrobdI85SS4xj-xFhLbV7Zs8SxQ0rEB1YrQ/exec";
 
 const UART_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
 const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
-
 const MATCH_THRESHOLD = 0.4;
+
+const registerStep = document.getElementById("registerStep");
+const mainSystem = document.getElementById("mainSystem");
+
+const registerNameInput = document.getElementById("registerNameInput");
+const registerEmailInput = document.getElementById("registerEmailInput");
+const registerVideo = document.getElementById("registerVideo");
+const registerCanvas = document.getElementById("registerCanvas");
+const startRegisterCameraBtn = document.getElementById("startRegisterCameraBtn");
+const capturePhotoBtn = document.getElementById("capturePhotoBtn");
+const clearCaptureBtn = document.getElementById("clearCaptureBtn");
+const capturePreviewContainer = document.getElementById("capturePreviewContainer");
+const submitRegisterBtn = document.getElementById("submitRegisterBtn");
+const skipRegisterBtn = document.getElementById("skipRegisterBtn");
 
 const video = document.getElementById("video");
 const canvas = document.getElementById("overlay");
@@ -314,16 +317,6 @@ const ctx = canvas.getContext("2d");
 
 const statusEl = document.getElementById("status");
 const resultTableBody = document.getElementById("resultTableBody");
-
-const registerStep = document.getElementById("registerStep");
-const mainSystem = document.getElementById("mainSystem");
-
-const registerNameInput = document.getElementById("registerNameInput");
-const registerEmailInput = document.getElementById("registerEmailInput");
-const registerFaceInput = document.getElementById("registerFaceInput");
-const previewContainer = document.getElementById("previewContainer");
-const submitRegisterBtn = document.getElementById("submitRegisterBtn");
-const skipRegisterBtn = document.getElementById("skipRegisterBtn");
 
 const connectBtn = document.getElementById("connectBtn");
 const identifyBtn = document.getElementById("identifyBtn");
@@ -340,7 +333,8 @@ let pendingUnlock = false;
 let pendingLabel = "";
 let pendingEmail = "";
 let indexCounter = 1;
-let selectedFaceFiles = [];
+let capturedImages = [];
+let registerStream = null;
 
 const chart = new Chart(
   document.getElementById("scoreChart"),
@@ -426,7 +420,6 @@ function loadLocalRegisteredFaces() {
       JSON.parse(localStorage.getItem("registeredUsers") || "[]");
 
     savedUsers.forEach(user => {
-      // 新版：多張照片，多組 descriptor
       if (Array.isArray(user.descriptors)) {
         user.descriptors.forEach((descriptorArray, index) => {
           knownDescriptors.push({
@@ -437,10 +430,7 @@ function loadLocalRegisteredFaces() {
             sampleIndex: index + 1
           });
         });
-      }
-
-      // 舊版相容：單張照片，一組 descriptor
-      else if (Array.isArray(user.descriptor)) {
+      } else if (Array.isArray(user.descriptor)) {
         knownDescriptors.push({
           label: user.name,
           email: user.email,
@@ -455,100 +445,124 @@ function loadLocalRegisteredFaces() {
   }
 }
 
+async function startRegisterCamera() {
+  try {
+    if (registerStream) {
+      registerStream.getTracks().forEach(track => track.stop());
+    }
+
+    registerStream =
+      await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user" },
+        audio: false
+      });
+
+    registerVideo.srcObject = registerStream;
+    statusEl.textContent = "📷 註冊用前鏡頭已啟動";
+  } catch (error) {
+    console.error(error);
+    statusEl.textContent = "❌ 無法啟動註冊鏡頭";
+  }
+}
+
+function captureRegisterPhoto() {
+  if (!registerVideo.videoWidth || !registerVideo.videoHeight) {
+    alert("請先啟動註冊鏡頭");
+    return;
+  }
+
+  if (capturedImages.length >= 3) {
+    alert("目前設定拍攝 3 張即可。若要重拍，請先刪除或清空。");
+    return;
+  }
+
+  const rctx = registerCanvas.getContext("2d");
+  registerCanvas.width = registerVideo.videoWidth;
+  registerCanvas.height = registerVideo.videoHeight;
+
+  // 這裡將照片鏡像保存，讓註冊影像與即時前鏡頭顯示方向一致
+  rctx.save();
+  rctx.translate(registerCanvas.width, 0);
+  rctx.scale(-1, 1);
+  rctx.drawImage(registerVideo, 0, 0, registerCanvas.width, registerCanvas.height);
+  rctx.restore();
+
+  const imageData = registerCanvas.toDataURL("image/jpeg", 0.92);
+  capturedImages.push(imageData);
+  renderCapturePreview();
+
+  statusEl.textContent = `📸 已拍攝 ${capturedImages.length} / 3 張照片`;
+}
+
+function renderCapturePreview() {
+  capturePreviewContainer.innerHTML = "";
+
+  if (capturedImages.length === 0) {
+    capturePreviewContainer.innerHTML =
+      '<div class="note">尚未拍攝照片，請拍攝 3 張清楚正臉。</div>';
+    return;
+  }
+
+  capturedImages.forEach((img, index) => {
+    const item = document.createElement("div");
+    item.className = "capture-item";
+
+    const image = document.createElement("img");
+    image.src = img;
+    image.className = "capture-preview";
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "delete-capture-btn";
+    delBtn.textContent = "×";
+    delBtn.onclick = () => {
+      capturedImages.splice(index, 1);
+      renderCapturePreview();
+      statusEl.textContent = `🗑️ 已刪除照片，目前剩餘 ${capturedImages.length} 張`;
+    };
+
+    item.appendChild(image);
+    item.appendChild(delBtn);
+    capturePreviewContainer.appendChild(item);
+  });
+}
+
+function clearCapturedPhotos() {
+  capturedImages = [];
+  renderCapturePreview();
+  statusEl.textContent = "🗑️ 已清空註冊照片";
+}
+
 function goToMainSystem() {
   registerStep.style.display = "none";
   mainSystem.style.display = "block";
   statusEl.textContent =
     `✅ 已進入辨識頁面，目前共 ${knownDescriptors.length} 筆臉部資料`;
-}
 
-
-function updatePhotoPreview() {
-  previewContainer.innerHTML = "";
-
-  if (selectedFaceFiles.length === 0) {
-    previewContainer.innerHTML =
-      '<div class="note">尚未選擇照片，請至少上傳 3 張清楚正臉照片。</div>';
-    return;
-  }
-
-  selectedFaceFiles.forEach((file, index) => {
-    const item = document.createElement("div");
-    item.className = "preview-item";
-
-    const img = document.createElement("img");
-    img.src = URL.createObjectURL(file);
-
-    const info = document.createElement("div");
-    info.className = "preview-info";
-    info.innerHTML = `
-      <div>照片 ${index + 1}：${file.name}</div>
-      <div class="preview-status" id="photoStatus${index}">等待檢測</div>
-    `;
-
-    const deleteBtn = document.createElement("button");
-    deleteBtn.className = "delete-photo-btn";
-    deleteBtn.textContent = "刪除";
-    deleteBtn.onclick = () => {
-      selectedFaceFiles.splice(index, 1);
-      updatePhotoPreview();
-      statusEl.textContent =
-        `🗑️ 已刪除照片，目前剩餘 ${selectedFaceFiles.length} 張`;
-    };
-
-    item.appendChild(img);
-    item.appendChild(info);
-    item.appendChild(deleteBtn);
-
-    previewContainer.appendChild(item);
-  });
-}
-
-function updatePhotoStatus(index, message, color = "#666") {
-  const status = document.getElementById(`photoStatus${index}`);
-  if (status) {
-    status.textContent = message;
-    status.style.color = color;
+  if (registerStream) {
+    registerStream.getTracks().forEach(track => track.stop());
+    registerStream = null;
   }
 }
-
-registerFaceInput.addEventListener("change", () => {
-  const newFiles = Array.from(registerFaceInput.files || []);
-
-  selectedFaceFiles = selectedFaceFiles.concat(newFiles);
-
-  // 清空 input，讓同一張照片刪掉後可以再次選取
-  registerFaceInput.value = "";
-
-  updatePhotoPreview();
-
-  statusEl.textContent =
-    `📸 已選擇 ${selectedFaceFiles.length} 張照片，至少需要 3 張。`;
-});
-
 
 async function submitRegistration() {
   const name = registerNameInput.value.trim();
   const email = registerEmailInput.value.trim().toLowerCase();
-  const files = selectedFaceFiles;
 
-  if (!name || !email || files.length < 3) {
-    alert("請輸入姓名、Gmail，並至少選擇 3 張清楚正臉照片");
+  if (!name || !email || capturedImages.length < 3) {
+    alert("請輸入姓名、Gmail，並拍攝 3 張清楚正臉照片");
     statusEl.textContent = "❌ 註冊資料不完整，至少需要 3 張照片";
     return;
   }
 
-  statusEl.textContent = "📸 正在讀取多張照片並擷取 128 維臉部特徵...";
+  statusEl.textContent = "📸 正在擷取 3 張照片的 128 維臉部特徵...";
 
   try {
     const descriptorArrays = [];
-    const failedIndexes = [];
 
-    for (let i = 0; i < files.length; i++) {
-      statusEl.textContent = `📸 正在處理第 ${i + 1} / ${files.length} 張照片...`;
-      updatePhotoStatus(i, "檢測中...", "#007bff");
+    for (let i = 0; i < capturedImages.length; i++) {
+      statusEl.textContent = `📸 正在處理第 ${i + 1} / ${capturedImages.length} 張照片...`;
 
-      const img = await faceapi.bufferToImage(files[i]);
+      const img = await faceapi.fetchImage(capturedImages[i]);
 
       const detection =
         await faceapi
@@ -563,24 +577,12 @@ async function submitRegistration() {
         .withFaceDescriptor();
 
       if (!detection) {
-        failedIndexes.push(i);
-        updatePhotoStatus(i, "未偵測到人臉，請刪除或更換", "#dc3545");
-        continue;
+        alert(`第 ${i + 1} 張照片未偵測到人臉，請重新拍攝`);
+        statusEl.textContent = `❌ 第 ${i + 1} 張照片未偵測到人臉`;
+        return;
       }
 
       descriptorArrays.push(Array.from(detection.descriptor));
-      updatePhotoStatus(i, "已成功擷取人臉特徵", "green");
-    }
-
-    if (descriptorArrays.length < 3) {
-      alert(
-        `有效人臉照片不足，目前只有 ${descriptorArrays.length} 張成功，至少需要 3 張。請刪除失敗照片並重新補上。`
-      );
-
-      statusEl.textContent =
-        `❌ 有效照片不足：成功 ${descriptorArrays.length} 張，失敗 ${failedIndexes.length} 張。請刪除紅色標示照片後補上新照片。`;
-
-      return;
     }
 
     let savedUsers =
@@ -616,16 +618,17 @@ async function submitRegistration() {
     statusEl.textContent = "☁️ 正在寫入 Google Sheet...";
 
     const res = await fetch(APPS_SCRIPT_URL, {
-  method: "POST",
-  body: JSON.stringify({
-    action: "register",
-    name: name,
-    email: email,
-    descriptor: descriptorArrays
-  })
-});
+      method: "POST",
+      body: JSON.stringify({
+        action: "register",
+        name: name,
+        email: email,
+        descriptor: descriptorArrays
+      })
+    });
 
-const data = await res.json();
+    const data = await res.json();
+
     if (!data.ok) {
       alert("本機註冊成功，但 Google Sheet 寫入失敗：" + (data.message || "unknown error"));
       statusEl.textContent =
@@ -642,7 +645,7 @@ const data = await res.json();
 
   } catch (error) {
     console.error(error);
-    alert("註冊失敗，請確認照片或 Apps Script 設定");
+    alert("註冊失敗，請確認照片、網路或 Apps Script 設定");
     statusEl.textContent = "❌ 註冊失敗";
   }
 }
@@ -650,7 +653,8 @@ const data = await res.json();
 async function startVideo() {
   const stream =
     await navigator.mediaDevices.getUserMedia({
-      video: true
+      video: { facingMode: "user" },
+      audio: false
     });
 
   video.srcObject = stream;
@@ -709,10 +713,22 @@ async function identifyFace() {
   pendingEmail = "";
   otpPanel.style.display = "none";
 
+  // 為了與註冊時鏡像保存一致，建立一個鏡像 canvas 再進行辨識
+  const mirrorCanvas = document.createElement("canvas");
+  mirrorCanvas.width = video.videoWidth;
+  mirrorCanvas.height = video.videoHeight;
+  const mctx = mirrorCanvas.getContext("2d");
+
+  mctx.save();
+  mctx.translate(mirrorCanvas.width, 0);
+  mctx.scale(-1, 1);
+  mctx.drawImage(video, 0, 0, mirrorCanvas.width, mirrorCanvas.height);
+  mctx.restore();
+
   const result =
     await faceapi
     .detectSingleFace(
-      video,
+      mirrorCanvas,
       new faceapi.TinyFaceDetectorOptions({
         inputSize: 160,
         scoreThreshold: 0.5
@@ -833,7 +849,6 @@ async function sendOTP() {
     return;
   }
 
-  // 如果此人臉有綁定 email，必須相同
   if (pendingEmail && email !== pendingEmail) {
     statusEl.textContent =
       "❌ Email 與辨識到的人臉資料不相符，拒絕寄送驗證碼";
@@ -914,6 +929,10 @@ async function verifyOTP() {
   }
 }
 
+startRegisterCameraBtn.onclick = startRegisterCamera;
+capturePhotoBtn.onclick = captureRegisterPhoto;
+clearCaptureBtn.onclick = clearCapturedPhotos;
+
 submitRegisterBtn.onclick = submitRegistration;
 skipRegisterBtn.onclick = goToMainSystem;
 
@@ -923,6 +942,7 @@ identifyBtn.onclick = identifyFace;
 sendOtpBtn.onclick = sendOTP;
 verifyOtpBtn.onclick = verifyOTP;
 
+renderCapturePreview();
 loadModels();
 </script>
 
