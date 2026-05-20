@@ -308,6 +308,84 @@
       }
     }
 
+
+    .analysis-button {
+      background: #17a2b8;
+      font-weight: bold;
+      margin-top: 8px;
+    }
+
+    #analysisModal {
+      display: none;
+      position: fixed;
+      z-index: 2000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background: rgba(0,0,0,0.55);
+      padding: 18px 0;
+    }
+
+    .analysis-content {
+      background: #ffffff;
+      margin: 20px auto;
+      padding: 18px;
+      border-radius: 16px;
+      width: 92%;
+      max-width: 780px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    }
+
+    .analysis-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 10px;
+      margin-bottom: 15px;
+    }
+
+    .analysis-header h3 {
+      margin: 0;
+    }
+
+    .close-analysis-btn {
+      background: #dc3545;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .analysis-summary {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 12px 0 18px 0;
+    }
+
+    .summary-card {
+      background: #f7f7f7;
+      border-radius: 12px;
+      padding: 12px 8px;
+      border: 1px solid #ddd;
+    }
+
+    .summary-card .num {
+      font-size: 20px;
+      font-weight: bold;
+      color: #007bff;
+      margin-top: 4px;
+    }
+
+    @media (max-width: 520px) {
+      .analysis-summary {
+        grid-template-columns: 1fr;
+      }
+    }
+
   </style>
 </head>
 
@@ -419,22 +497,49 @@
     <button id="identifyBtn" disabled>🧠 開始辨識</button>
   </div>
 
-  <div id="chartContainer">
-    <canvas id="scoreChart"></canvas>
-  </div>
+  <button id="openAnalysisBtn" class="analysis-button">📊 結果分析</button>
+</div>
 
-  <div style="max-width:700px;margin:auto;">
-    <table>
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>辨識對象</th>
-          <th>相似度</th>
-          <th>結果</th>
-        </tr>
-      </thead>
-      <tbody id="resultTableBody"></tbody>
-    </table>
+
+<div id="analysisModal">
+  <div class="analysis-content">
+    <div class="analysis-header">
+      <h3>📊 結果分析</h3>
+      <button id="closeAnalysisBtn" class="close-analysis-btn">關閉</button>
+    </div>
+
+    <div class="analysis-summary">
+      <div class="summary-card">
+        <div>辨識次數</div>
+        <div class="num" id="totalCount">0</div>
+      </div>
+      <div class="summary-card">
+        <div>成功次數</div>
+        <div class="num" id="successCount">0</div>
+      </div>
+      <div class="summary-card">
+        <div>平均相似度</div>
+        <div class="num" id="avgScore">-</div>
+      </div>
+    </div>
+
+    <div id="chartContainer">
+      <canvas id="scoreChart"></canvas>
+    </div>
+
+    <div style="max-width:700px;margin:auto;overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>辨識對象</th>
+            <th>相似度</th>
+            <th>結果</th>
+          </tr>
+        </thead>
+        <tbody id="resultTableBody"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -482,6 +587,13 @@ const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
 const resultTableBody = document.getElementById("resultTableBody");
 
+const openAnalysisBtn = document.getElementById("openAnalysisBtn");
+const closeAnalysisBtn = document.getElementById("closeAnalysisBtn");
+const analysisModal = document.getElementById("analysisModal");
+const totalCountEl = document.getElementById("totalCount");
+const successCountEl = document.getElementById("successCount");
+const avgScoreEl = document.getElementById("avgScore");
+
 const connectBtn = document.getElementById("connectBtn");
 const identifyBtn = document.getElementById("identifyBtn");
 
@@ -498,6 +610,8 @@ let pendingUnlock = false;
 let pendingLabel = "";
 let pendingEmail = "";
 let indexCounter = 1;
+let recognitionScores = [];
+let recognitionSuccessCount = 0;
 let capturedImages = [];
 let registerStream = null;
 let activeUser = null;
@@ -527,6 +641,32 @@ const chart = new Chart(
     }
   }
 );
+
+function openAnalysisModal() {
+  analysisModal.style.display = "block";
+  updateAnalysisSummary();
+}
+
+function closeAnalysisModal() {
+  analysisModal.style.display = "none";
+}
+
+function updateAnalysisSummary() {
+  const total = recognitionScores.length;
+  const avg = total > 0
+    ? recognitionScores.reduce((sum, val) => sum + val, 0) / total
+    : null;
+
+  totalCountEl.textContent = total;
+  successCountEl.textContent = recognitionSuccessCount;
+  avgScoreEl.textContent = avg !== null ? avg.toFixed(3) : "-";
+}
+
+window.onclick = function(event) {
+  if (event.target === analysisModal) {
+    closeAnalysisModal();
+  }
+}
 
 async function loadModels() {
   try {
@@ -1144,9 +1284,15 @@ async function identifyFace() {
 
   drawBox.draw(canvas);
 
+  recognitionScores.push(bestMatch.dist);
+  if (success) {
+    recognitionSuccessCount++;
+  }
+
   chart.data.labels.push(indexCounter);
   chart.data.datasets[0].data.push(bestMatch.dist);
   chart.update();
+  updateAnalysisSummary();
 
   const row = document.createElement("tr");
 
@@ -1292,6 +1438,9 @@ identifyBtn.onclick = identifyFace;
 
 sendOtpBtn.onclick = sendOTP;
 verifyOtpBtn.onclick = verifyOTP;
+
+openAnalysisBtn.onclick = openAnalysisModal;
+closeAnalysisBtn.onclick = closeAnalysisModal;
 
 renderCapturePreview();
 updateCaptureProgress();
